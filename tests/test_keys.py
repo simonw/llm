@@ -42,6 +42,23 @@ def test_keys_set(monkeypatch, tmpdir):
     }
 
 
+@pytest.mark.parametrize(
+    "value", ("sk-bad\u221akey", "sk-zero\u200bwidth", "caf\u00e9")
+)
+def test_keys_set_rejects_non_ascii(monkeypatch, tmpdir, value):
+    # https://github.com/simonw/llm/issues/576
+    user_path = tmpdir / "user/keys"
+    monkeypatch.setenv("LLM_USER_PATH", str(user_path))
+    keys_path = user_path / "keys.json"
+    runner = CliRunner()
+    result = runner.invoke(cli, ["keys", "set", "openai", "--value", value])
+    assert result.exit_code == 1
+    assert "API keys must contain only ASCII characters" in result.output
+    assert "U+" in result.output
+    # Nothing should have been written
+    assert not keys_path.exists()
+
+
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 def test_keys_get(monkeypatch, tmpdir):
     user_path = tmpdir / "user/keys"
