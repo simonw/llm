@@ -3810,7 +3810,7 @@ def embed_multi(
             for row in rows:
                 values = list(row.values())
                 id: str = prefix + str(values[0])
-                content: Attachment | bytes | str | None = None
+                content: Attachment | bytes | str
                 if isinstance(values[1], Attachment):
                     content = values[1]
                 elif binary:
@@ -3819,7 +3819,7 @@ def embed_multi(
                     content = " ".join(v or "" for v in values[1:])
                 if prepend and isinstance(content, str):
                     content = prepend + content
-                yield id, content or ""
+                yield id, content
 
         embed_kwargs = {"store": store, "key": key}
         if batch_size:

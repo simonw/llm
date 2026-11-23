@@ -597,6 +597,31 @@ def test_embed_multi_file_input(
     assert ids == expected_ids
 
 
+def test_embed_multi_empty_binary_file(db_factory, tmp_path):
+    db_path = tmp_path / "embeddings.db"
+    (tmp_path / "empty.bin").write_bytes(b"")
+    result = CliRunner().invoke(
+        cli,
+        [
+            "embed-multi",
+            "files",
+            "--files",
+            str(tmp_path),
+            "*.bin",
+            "--binary",
+            "--store",
+            "-m",
+            "embed-binary-only",
+            "-d",
+            str(db_path),
+        ],
+    )
+    assert result.exit_code == 0, result.exception
+    row = db_factory(str(db_path))["embeddings"].get((1, "empty.bin"))
+    assert row["content"] is None
+    assert row["content_blob"] == b""
+
+
 def test_embed_multi_files_binary_store(db_factory, tmpdir):
     db_path = tmpdir / "embeddings.db"
     args = ["embed-multi", "binfiles", "-d", str(db_path), "-m", "embed-demo"]
