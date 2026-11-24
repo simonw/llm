@@ -6,6 +6,7 @@ breaks on systems where that is not UTF-8, such as Windows with a legacy code
 page.
 """
 
+import builtins
 import json
 import pathlib
 
@@ -13,6 +14,7 @@ import pytest
 from click.testing import CliRunner
 
 from llm.cli import cli
+from llm.utils import resolve_schema_input
 
 
 @pytest.fixture
@@ -65,3 +67,43 @@ def test_functions_file_with_non_ascii_is_read_as_utf8(
         catch_exceptions=False,
     )
     assert result.exit_code == 0, result.output
+
+
+@pytest.fixture
+def non_utf8_open(monkeypatch):
+    # Same as non_utf8_locale, for code that calls open() in text mode without
+    # an encoding.
+    original_open = builtins.open
+
+    def fake_open(file, mode="r", *args, encoding=None, **kwargs):
+        if "b" not in mode and encoding is None:
+            encoding = "ascii"
+        return original_open(file, mode, *args, encoding=encoding, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", fake_open)
+
+
+def test_similar_input_file_with_non_ascii_is_read_as_utf8(
+    tmp_path, user_path_with_embeddings, non_utf8_locale, non_utf8_open
+):
+    content_path = tmp_path / "content.txt"
+    content_path.write_bytes("héllo wörld".encode())
+    runner = CliRunner()
+    from_file = runner.invoke(
+        cli, ["similar", "demo", "-i", str(content_path)], catch_exceptions=False
+    )
+    from_argument = runner.invoke(
+        cli, ["similar", "demo", "-c", "héllo wörld"], catch_exceptions=False
+    )
+    assert from_file.exit_code == 0, from_file.output
+    assert from_file.output == from_argument.output
+
+
+def test_schema_file_with_non_ascii_is_read_as_utf8(tmp_path, non_utf8_locale):
+    schema = {
+        "type": "object",
+        "properties": {"name": {"type": "string", "description": "名字"}},
+    }
+    schema_path = tmp_path / "schema.json"
+    schema_path.write_text(json.dumps(schema, ensure_ascii=False), "utf-8")
+    assert resolve_schema_input(None, str(schema_path), None) == schema

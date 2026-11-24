@@ -309,6 +309,15 @@ def output_rows_as_json(rows, nl=False, compact=False, json_cols=()):
         yield "[]"
 
 
+def read_text_file(path: pathlib.Path) -> str:
+    "Read a text file as UTF-8, falling back to the locale default encoding"
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        # Not UTF-8 - read it using the default encoding for this system
+        return path.read_text()
+
+
 def resolve_schema_input(db, schema_input, load_template):
     # schema_input might be JSON or a filepath or an ID or t:name
     if not schema_input:
@@ -339,7 +348,7 @@ def resolve_schema_input(db, schema_input, load_template):
     path = pathlib.Path(schema_input)
     if path.exists():
         try:
-            return json.loads(path.read_text())
+            return json.loads(read_text_file(path))
         except ValueError:
             raise click.ClickException("Schema file contained invalid JSON")
     # Last attempt: is it an ID in the DB?
