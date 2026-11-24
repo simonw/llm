@@ -90,6 +90,9 @@ from .utils import (
     token_usage_string,
     truncate_string,
 )
+from .utils import (
+    read_text_file as _read_text_file,
+)
 
 warnings.simplefilter("ignore", ResourceWarning)
 
@@ -3932,10 +3935,11 @@ def similar(
                 # Read from stdin
                 input_source = sys.stdin.buffer if binary else sys.stdin
                 content = input_source.read()
-            else:
-                mode = "rb" if binary else "r"
-                with open(input, mode) as f:
+            elif binary:
+                with open(input, "rb") as f:
                     content = f.read()
+            else:
+                content = _read_text_file(pathlib.Path(input))
         if not content:
             raise click.ClickException("No content provided")
         try:
@@ -4412,15 +4416,6 @@ def _parse_yaml_template(name, content):
         msg = "A validation error occurred:\n"
         msg += render_errors(ex.errors())
         raise LoadTemplateError(msg)
-
-
-def _read_text_file(path: pathlib.Path) -> str:
-    "Read a text file as UTF-8, falling back to the locale default encoding"
-    try:
-        return path.read_text(encoding="utf-8")
-    except UnicodeDecodeError:
-        # Not UTF-8 - read it using the default encoding for this system
-        return path.read_text()
 
 
 def load_template(name: str) -> Template:
