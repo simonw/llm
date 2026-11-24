@@ -171,9 +171,9 @@ def test_template_nested_validation_error(
         ),
         # Model option using an enum: https://github.com/simonw/llm/issues/1237
         (
-            ["-m", "gpt-5", "-o", "reasoning_effort", "minimal"],
+            ["-m", "gpt-5.1", "-o", "reasoning_effort", "minimal"],
             {
-                "model": "gpt-5",
+                "model": "gpt-5.1",
                 "options": {"reasoning_effort": "minimal"},
             },
             None,

@@ -35,13 +35,6 @@ OpenAI Chat: gpt-4o (aliases: 4o)
 OpenAI Chat: gpt-4o-mini (aliases: 4o-mini)
 OpenAI Chat: gpt-4.1 (aliases: 4.1)
 OpenAI Chat: gpt-4.1-mini (aliases: 4.1-mini)
-OpenAI Responses: o3
-OpenAI Responses: gpt-5
-OpenAI Responses: gpt-5-mini
-OpenAI Responses: gpt-5-nano
-OpenAI Responses: gpt-5-2025-08-07
-OpenAI Responses: gpt-5-mini-2025-08-07
-OpenAI Responses: gpt-5-nano-2025-08-07
 OpenAI Responses: gpt-5.1
 OpenAI Responses: gpt-5.2
 OpenAI Responses: gpt-5.4
@@ -279,7 +272,7 @@ If the model should use the OpenAI Responses API rather than Chat Completions, a
 
 If the model supports structured extraction using json_schema, add `supports_schema: true` to the configuration.
 
-For reasoning models like `o3` add `reasoning: true`.
+For reasoning models like `gpt-5.1` add `reasoning: true`.
 
 If the model supports the `service_tier` parameter - see {ref}`openai-models-service-tier` - add `service_tier: true` to enable the corresponding option.
 

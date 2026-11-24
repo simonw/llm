@@ -739,7 +739,7 @@ OpenAI Chat: gpt-4.1-mini (aliases: 4.1-mini)
   Keys:
     key: openai
     env_var: OPENAI_API_KEY
-OpenAI Responses: o3
+OpenAI Responses: gpt-5.1
   Options:
     temperature: float
       What sampling temperature to use, between 0 and 2. Higher values like
@@ -785,199 +785,13 @@ OpenAI Responses: o3
     reasoning_summary: str
       Requests a summary of the model's reasoning. Supported values are
       auto, concise, and detailed.
+    verbosity: str
+      Controls how verbose the model's response should be. Supported values
+      are low, medium, and high.
     service_tier: str
       The processing tier to use for this request - for example 'fast' for
       Fast mode (faster responses at a higher price) or 'flex' for slower,
       cheaper processing on models that support those tiers.
-  Attachment types:
-    application/pdf, image/gif, image/jpeg, image/png, image/webp
-  Features:
-  - streaming
-  - schemas
-  - tools
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Responses: gpt-5
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    chat_completions: boolean
-    image_detail: str
-    reasoning_effort: str
-    reasoning_summary: str
-    verbosity: str
-    service_tier: str
-  Attachment types:
-    application/pdf, image/gif, image/jpeg, image/png, image/webp
-  Features:
-  - streaming
-  - schemas
-  - tools
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Responses: gpt-5-mini
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    chat_completions: boolean
-    image_detail: str
-    reasoning_effort: str
-    reasoning_summary: str
-    verbosity: str
-    service_tier: str
-  Attachment types:
-    application/pdf, image/gif, image/jpeg, image/png, image/webp
-  Features:
-  - streaming
-  - schemas
-  - tools
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Responses: gpt-5-nano
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    chat_completions: boolean
-    image_detail: str
-    reasoning_effort: str
-    reasoning_summary: str
-    verbosity: str
-    service_tier: str
-  Attachment types:
-    application/pdf, image/gif, image/jpeg, image/png, image/webp
-  Features:
-  - streaming
-  - schemas
-  - tools
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Responses: gpt-5-2025-08-07
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    chat_completions: boolean
-    image_detail: str
-    reasoning_effort: str
-    reasoning_summary: str
-    verbosity: str
-    service_tier: str
-  Attachment types:
-    application/pdf, image/gif, image/jpeg, image/png, image/webp
-  Features:
-  - streaming
-  - schemas
-  - tools
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Responses: gpt-5-mini-2025-08-07
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    chat_completions: boolean
-    image_detail: str
-    reasoning_effort: str
-    reasoning_summary: str
-    verbosity: str
-    service_tier: str
-  Attachment types:
-    application/pdf, image/gif, image/jpeg, image/png, image/webp
-  Features:
-  - streaming
-  - schemas
-  - tools
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Responses: gpt-5-nano-2025-08-07
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    chat_completions: boolean
-    image_detail: str
-    reasoning_effort: str
-    reasoning_summary: str
-    verbosity: str
-    service_tier: str
-  Attachment types:
-    application/pdf, image/gif, image/jpeg, image/png, image/webp
-  Features:
-  - streaming
-  - schemas
-  - tools
-  - async
-  Keys:
-    key: openai
-    env_var: OPENAI_API_KEY
-OpenAI Responses: gpt-5.1
-  Options:
-    temperature: float
-    max_tokens: int
-    top_p: float
-    frequency_penalty: float
-    presence_penalty: float
-    stop: str
-    logit_bias: dict, str
-    seed: int
-    json_object: boolean
-    chat_completions: boolean
-    image_detail: str
-    reasoning_effort: str
-    reasoning_summary: str
-    verbosity: str
-    service_tier: str
   Attachment types:
     application/pdf, image/gif, image/jpeg, image/png, image/webp
   Features:

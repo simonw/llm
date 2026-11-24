@@ -66,8 +66,6 @@ def test_openai_options_min_max():
 @pytest.mark.parametrize(
     "model_id",
     (
-        "gpt-5",
-        "gpt-5-mini",
         "gpt-5.1",
         "gpt-5.2",
         "gpt-5.4",
@@ -79,7 +77,7 @@ def test_gpt5_models_support_verbosity_option(model_id):
     assert "verbosity" in llm.get_async_model(model_id).Options.model_fields
 
 
-@pytest.mark.parametrize("model_id", ("gpt-4o", "o3"))
+@pytest.mark.parametrize("model_id", ("gpt-4o",))
 def test_non_gpt5_openai_chat_models_do_not_support_verbosity_option(model_id):
     assert "verbosity" not in llm.get_model(model_id).Options.model_fields
     assert "verbosity" not in llm.get_async_model(model_id).Options.model_fields
@@ -114,6 +112,18 @@ def test_non_gpt5_openai_chat_models_do_not_support_verbosity_option(model_id):
         "o1-2024-12-17",
         "o3-mini",
         "o4-mini",
+        "gpt-5",
+        "gpt-5-2025-08-07",
+        "gpt-5-mini",
+        "gpt-5-mini-2025-08-07",
+        "gpt-5-nano",
+        "gpt-5-nano-2025-08-07",
+        "gpt-5-pro",
+        "gpt-5-pro-2025-10-06",
+        "o3",
+        "o3-2025-04-16",
+        "o3-pro",
+        "o3-pro-2025-06-10",
     ),
 )
 def test_deprecated_models_are_not_registered(model_id):
@@ -128,7 +138,7 @@ def test_gpt5_verbosity_option_is_sent_to_openai_chat_completions(httpx2_mock):
         method="POST",
         url="https://api.openai.com/v1/chat/completions",
         json={
-            "model": "gpt-5",
+            "model": "gpt-5.1",
             "usage": {},
             "choices": [{"message": {"content": "Verbose enough"}}],
         },
@@ -139,7 +149,7 @@ def test_gpt5_verbosity_option_is_sent_to_openai_chat_completions(httpx2_mock):
         cli,
         [
             "-m",
-            "gpt-5",
+            "gpt-5.1",
             "-o",
             "chat_completions",
             "1",
@@ -167,7 +177,7 @@ def test_gpt5_verbosity_option_is_sent_to_openai_responses_by_default(httpx2_moc
             "id": "resp_test_1",
             "object": "response",
             "created_at": 1,
-            "model": "gpt-5",
+            "model": "gpt-5.1",
             "output": [
                 {
                     "type": "message",
@@ -197,7 +207,7 @@ def test_gpt5_verbosity_option_is_sent_to_openai_responses_by_default(httpx2_moc
         cli,
         [
             "-m",
-            "gpt-5",
+            "gpt-5.1",
             "-o",
             "verbosity",
             "high",
@@ -219,7 +229,7 @@ def test_gpt5_verbosity_option_validates_allowed_values():
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["-m", "gpt-5", "-o", "verbosity", "extreme", "Say hi"],
+        ["-m", "gpt-5.1", "-o", "verbosity", "extreme", "Say hi"],
     )
     assert result.exit_code == 1
     assert "Input should be 'low', 'medium' or 'high'" in result.output
@@ -686,7 +696,7 @@ def test_openai_image_detail_original_is_rejected_for_other_models():
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["-m", "gpt-5", "-o", "image_detail", "original", "Say hi"],
+        ["-m", "gpt-5.1", "-o", "image_detail", "original", "Say hi"],
     )
     assert result.exit_code == 1
     assert "Input should be 'low', 'high' or 'auto'" in result.output
