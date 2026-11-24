@@ -196,53 +196,6 @@ def register_models(register):
             ),
             aliases=(model_id.replace("gpt-", ""),),
         )
-    register(
-        Responses(
-            "o3",
-            vision=True,
-            reasoning=True,
-            service_tier=True,
-            supports_schema=True,
-            supports_tools=True,
-        ),
-        AsyncResponses(
-            "o3",
-            vision=True,
-            reasoning=True,
-            service_tier=True,
-            supports_schema=True,
-            supports_tools=True,
-        ),
-    )
-    # GPT-5
-    for model_id in (
-        "gpt-5",
-        "gpt-5-mini",
-        "gpt-5-nano",
-        "gpt-5-2025-08-07",
-        "gpt-5-mini-2025-08-07",
-        "gpt-5-nano-2025-08-07",
-    ):
-        register(
-            Responses(
-                model_id,
-                vision=True,
-                reasoning=True,
-                verbosity=True,
-                service_tier=True,
-                supports_schema=True,
-                supports_tools=True,
-            ),
-            AsyncResponses(
-                model_id,
-                vision=True,
-                reasoning=True,
-                verbosity=True,
-                service_tier=True,
-                supports_schema=True,
-                supports_tools=True,
-            ),
-        )
     # GPT-5.1
     register(
         Responses(
