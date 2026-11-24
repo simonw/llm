@@ -972,7 +972,8 @@ Options:
   --sql TEXT                      Read input using this SQL query
   --attach <TEXT FILE>...         Additional databases to attach - specify alias
                                   and file path
-  --batch-size INTEGER            Batch size to use when running embeddings
+  --batch-size INTEGER RANGE      Batch size to use when running embeddings
+                                  [x>=0]
   --prefix TEXT                   Prefix to add to the IDs
   -m, --model TEXT                Embedding model to use
   --key TEXT                      API key to use

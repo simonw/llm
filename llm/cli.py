@@ -3584,7 +3584,9 @@ def embed(
     help="Additional databases to attach - specify alias and file path",
 )
 @click.option(
-    "--batch-size", type=int, help="Batch size to use when running embeddings"
+    "--batch-size",
+    type=click.IntRange(min=0),
+    help="Batch size to use when running embeddings",
 )
 @click.option("--prefix", help="Prefix to add to the IDs", default="")
 @click.option(
