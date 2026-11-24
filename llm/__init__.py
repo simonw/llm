@@ -113,16 +113,41 @@ def get_plugins(all=False):
     return plugins
 
 
+def _configured_aliases() -> dict[str, str]:
+    "Aliases the user set with 'llm aliases set', from aliases.json"
+    aliases_path = user_dir() / "aliases.json"
+    if aliases_path.exists():
+        return json.loads(aliases_path.read_text())
+    return {}
+
+
+def _alias_map(models_and_aliases) -> dict:
+    """
+    Map each alias and model ID to its model. Aliases from aliases.json are
+    applied last, so they take precedence over aliases registered by plugins
+    no matter what order the models were registered in.
+    """
+    configured = _configured_aliases()
+    aliases: dict = {}
+    user_aliases: dict = {}
+    for model, alias_list in models_and_aliases:
+        for alias in alias_list:
+            if configured.get(alias) == model.model_id:
+                user_aliases[alias] = model
+            else:
+                aliases[alias] = model
+        aliases[model.model_id] = model
+    aliases.update(user_aliases)
+    return aliases
+
+
 def get_models_with_aliases() -> list["ModelWithAliases"]:
     model_aliases = []
 
     # Include aliases from aliases.json
-    aliases_path = user_dir() / "aliases.json"
     extra_model_aliases: dict[str, list] = {}
-    if aliases_path.exists():
-        configured_aliases = json.loads(aliases_path.read_text())
-        for alias, model_id in configured_aliases.items():
-            extra_model_aliases.setdefault(model_id, []).append(alias)
+    for alias, model_id in _configured_aliases().items():
+        extra_model_aliases.setdefault(model_id, []).append(alias)
 
     def register(model, async_model=None, aliases=None):
         alias_list = list(aliases or [])
@@ -240,12 +265,9 @@ def get_embedding_models_with_aliases() -> list["EmbeddingModelWithAliases"]:
     model_aliases = []
 
     # Include aliases from aliases.json
-    aliases_path = user_dir() / "aliases.json"
     extra_model_aliases: dict[str, list] = {}
-    if aliases_path.exists():
-        configured_aliases = json.loads(aliases_path.read_text())
-        for alias, model_id in configured_aliases.items():
-            extra_model_aliases.setdefault(model_id, []).append(alias)
+    for alias, model_id in _configured_aliases().items():
+        extra_model_aliases.setdefault(model_id, []).append(alias)
 
     def register(model, aliases=None):
         alias_list = list(aliases or [])
@@ -279,34 +301,23 @@ def get_embedding_model(name):
 
 
 def get_embedding_model_aliases() -> dict[str, EmbeddingModel]:
-    model_aliases = {}
-    for model_with_aliases in get_embedding_models_with_aliases():
-        for alias in model_with_aliases.aliases:
-            model_aliases[alias] = model_with_aliases.model
-        model_aliases[model_with_aliases.model.model_id] = model_with_aliases.model
-    return model_aliases
+    return _alias_map(
+        (mwa.model, mwa.aliases) for mwa in get_embedding_models_with_aliases()
+    )
 
 
 def get_async_model_aliases() -> dict[str, AsyncModel]:
-    async_model_aliases = {}
-    for model_with_aliases in get_models_with_aliases():
-        if model_with_aliases.async_model:
-            for alias in model_with_aliases.aliases:
-                async_model_aliases[alias] = model_with_aliases.async_model
-            async_model_aliases[model_with_aliases.model.model_id] = (
-                model_with_aliases.async_model
-            )
-    return async_model_aliases
+    return _alias_map(
+        (mwa.async_model, mwa.aliases)
+        for mwa in get_models_with_aliases()
+        if mwa.async_model
+    )
 
 
 def get_model_aliases() -> dict[str, Model]:
-    model_aliases = {}
-    for model_with_aliases in get_models_with_aliases():
-        if model_with_aliases.model:
-            for alias in model_with_aliases.aliases:
-                model_aliases[alias] = model_with_aliases.model
-            model_aliases[model_with_aliases.model.model_id] = model_with_aliases.model
-    return model_aliases
+    return _alias_map(
+        (mwa.model, mwa.aliases) for mwa in get_models_with_aliases() if mwa.model
+    )
 
 
 class UnknownModelError(KeyError):

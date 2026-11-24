@@ -128,3 +128,27 @@ def test_cli_aliases_are_registered(user_path, args):
     assert result.exit_code == 0
     # Check for model line only, without keys, as --options is not used
     assert "gpt-4o-mini (aliases: 4o-mini, turbo)" in result.output
+
+
+@pytest.mark.parametrize(
+    "alias,model_id",
+    (
+        # Built-in alias of a model registered before the target model
+        ("4o", "gpt-4.1"),
+        # Built-in alias of a model registered after the target model
+        ("4.1", "gpt-4o"),
+    ),
+)
+def test_user_alias_overrides_plugin_alias(user_path, alias, model_id):
+    llm.set_alias(alias, model_id)
+    assert llm.get_model(alias).model_id == model_id
+    assert llm.get_async_model(alias).model_id == model_id
+    result = CliRunner().invoke(cli, ["aliases", "list", "--json"])
+    assert result.exit_code == 0
+    assert json.loads(result.output)[alias] == model_id
+
+
+def test_user_alias_overrides_embedding_plugin_alias(user_path):
+    # text-embedding-3-large, which owns "3-large", is registered after this
+    llm.set_alias("3-large", "text-embedding-3-small")
+    assert llm.get_embedding_model("3-large").model_id == "text-embedding-3-small"
