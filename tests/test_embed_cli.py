@@ -752,7 +752,30 @@ def test_embed_multi_sql(db_factory, tmpdir, use_other_db, prefix, prepend):
     ]
 
 
-def test_embed_multi_batch_size(db_factory, embed_demo, tmpdir):
+def test_embed_multi_rejects_negative_batch_size(tmp_path):
+    database = tmp_path / "embeddings.db"
+    result = CliRunner().invoke(
+        cli,
+        [
+            "embed-multi",
+            "rows",
+            "--sql",
+            "select 'id', 'hello'",
+            "--model",
+            "embed-demo",
+            "--database",
+            str(database),
+            "--batch-size",
+            "-1",
+        ],
+    )
+    assert result.exit_code == 2
+    assert "Invalid value for '--batch-size'" in result.output
+    assert not database.exists()
+
+
+@pytest.mark.parametrize(("size", "expected_batches"), [(8, 13), (0, 10)])
+def test_embed_multi_batch_size(db_factory, embed_demo, tmpdir, size, expected_batches):
     db_path = str(tmpdir / "data.db")
     runner = CliRunner()
     sql = """
@@ -777,13 +800,13 @@ def test_embed_multi_batch_size(db_factory, embed_demo, tmpdir):
             "embed-demo",
             "--store",
             "--batch-size",
-            "8",
+            str(size),
         ],
     )
     assert result.exit_code == 0
     db = db_factory(db_path)
     assert db["embeddings"].count == 100
-    assert embed_demo.batch_count == 13
+    assert embed_demo.batch_count == expected_batches
 
 
 @pytest.fixture
