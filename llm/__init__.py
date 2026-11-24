@@ -391,18 +391,43 @@ def get_key(
     stored_keys = load_keys()
     # If user specified an alias, use the key stored for that alias
     if explicit_key in stored_keys:
-        return stored_keys[explicit_key]
+        return _check_key_ascii(
+            stored_keys[explicit_key], f"stored key '{explicit_key}'"
+        )
     if explicit_key:
         # User specified a key that's not an alias, use that
-        return explicit_key
+        return _check_key_ascii(explicit_key, "the key you provided")
     # Stored key over-rides environment variables over-ride the default key
     if key_alias in stored_keys:
-        return stored_keys[key_alias]
+        return _check_key_ascii(stored_keys[key_alias], f"stored key '{key_alias}'")
     # Finally try environment variable
     if env_var and os.environ.get(env_var):
-        return os.environ[env_var]
+        return _check_key_ascii(os.environ[env_var], f"environment variable {env_var}")
     # Couldn't find it
     return None
+
+
+def _check_key_ascii(key: str, source: str | None = None) -> str:
+    """
+    Return ``key`` unchanged, or raise ``ValueError`` if it contains non-ASCII characters.
+
+    HTTP header values must be ASCII, so a key containing e.g. an invisible character
+    picked up when pasting it would later fail with an opaque
+    "'ascii' codec can't encode character" error when used in a request. The message
+    names the offending code points but never the key itself.
+
+    :param source: Where the key came from, added to the error message.
+    """
+    if not isinstance(key, str) or key.isascii():
+        return key
+    bad = ", ".join(
+        f"U+{ord(c):04X}" for c in sorted({c for c in key if not c.isascii()})
+    )
+    where = f" (in {source})" if source else ""
+    raise ValueError(
+        f"API keys must contain only ASCII characters, found: {bad}{where}. "
+        "Please copy the key again and retry."
+    )
 
 
 def load_keys():

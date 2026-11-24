@@ -10,6 +10,8 @@ This method can be used to look up secrets that users have stored using the {ref
 
 This returns either a string containing the key or `None` if the key could not be resolved.
 
+A `ValueError` is raised if the resolved key contains non-ASCII characters, since API keys are sent as HTTP headers and such a key could never be used. The error message lists the offending code points but not the key itself.
+
 Use the `alias="name"` option to retrieve the key set with that alias:
 
 ```python

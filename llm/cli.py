@@ -42,6 +42,7 @@ from llm import (
     Tool,
     Toolbox,
     UnknownModelError,
+    _check_key_ascii,
     encode,
     get_async_model,
     get_default_embedding_model,
@@ -1608,17 +1609,10 @@ def keys_set(name, value):
         $ llm keys set openai
         Enter key: ...
     """
-    if not value.isascii():
-        # HTTP header values must be ASCII, so a key containing e.g. an invisible
-        # character from a clipboard manager would later fail with an opaque
-        # "'ascii' codec can't encode character" error when used in a request
-        bad = ", ".join(
-            f"U+{ord(c):04X}" for c in sorted({c for c in value if not c.isascii()})
-        )
-        raise click.ClickException(
-            f"API keys must contain only ASCII characters, found: {bad}. "
-            "Please copy the key again and retry."
-        )
+    try:
+        _check_key_ascii(value)
+    except ValueError as ex:
+        raise click.ClickException(str(ex))
     default = {"// Note": "This file stores secret API credentials. Do not share!"}
     path = user_dir() / "keys.json"
     path.parent.mkdir(parents=True, exist_ok=True)
