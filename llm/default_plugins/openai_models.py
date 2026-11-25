@@ -2144,6 +2144,102 @@ class CodeInterpreter(llm.ServerSideTool):
             include.append("code_interpreter_call.outputs")
 
 
+# Separator between the summary parts of one reasoning item. Each part
+# opens with its own "**Heading**" line and none ends with a newline, so
+# joining them directly glues each heading onto the previous paragraph.
+REASONING_SUMMARY_SEPARATOR = "\n\n"
+
+
+def _next_part_index(response):
+    """A fresh part_index for ``response``, or None to leave allocation to
+    the framework if this response object does not expose one."""
+    next_part_index = getattr(response, "_next_part_index", None)
+    return next_part_index() if next_part_index else None
+
+
+class _StreamedReasoning:
+    """Tracks reasoning items while a Responses API reply streams.
+
+    Two things go wrong if reasoning deltas are passed straight through:
+
+    - A reasoning item can have several summary parts (one
+      ``summary_index`` each). Their text has to be separated by a
+      blank line or the headings run into the previous paragraph.
+    - Back-to-back reasoning items would be concatenated into a single
+      ReasoningPart by the auto-allocator, keeping only the last item's
+      ``id`` / ``encrypted_content`` for replay. Each item is pinned to
+      its own part_index instead.
+    """
+
+    def __init__(self, response):
+        self.response = response
+        # (item_id, summary_index) pairs whose text has been emitted
+        self.parts_with_text: set[tuple[Any, Any]] = set()
+        # item ids with any emitted text
+        self.items_with_text: set[Any] = set()
+        # item id -> first StreamEvent yielded for that item, whose
+        # part_index the framework resolves as soon as it is yielded
+        self.first_events: dict[Any, StreamEvent] = {}
+
+    def _part_index(self, item_id):
+        first = self.first_events.get(item_id)
+        if first is not None:
+            return first.part_index
+        return _next_part_index(self.response)
+
+    def _remember(self, item_id, event):
+        if item_id is not None:
+            self.first_events.setdefault(item_id, event)
+        return event
+
+    def _text_event(self, event, text, message_index):
+        item_id = getattr(event, "item_id", None)
+        index = getattr(event, "summary_index", None)
+        if index is None:
+            index = getattr(event, "content_index", None)
+        key = (item_id, index)
+        if key not in self.parts_with_text:
+            if item_id in self.items_with_text:
+                text = REASONING_SUMMARY_SEPARATOR + text
+            self.parts_with_text.add(key)
+        self.items_with_text.add(item_id)
+        return self._remember(
+            item_id,
+            StreamEvent(
+                type="reasoning",
+                chunk=text,
+                part_index=self._part_index(item_id),
+                message_index=message_index,
+            ),
+        )
+
+    def delta(self, event, message_index):
+        "Event for a reasoning_summary_text.delta / reasoning_text.delta"
+        return self._text_event(event, event.delta or "", message_index)
+
+    def done(self, event, message_index):
+        """Event for a reasoning_summary_text.done / reasoning_text.done,
+        or None if that summary part's text already arrived as deltas."""
+        item_id = getattr(event, "item_id", None)
+        index = getattr(event, "summary_index", None)
+        if index is None:
+            index = getattr(event, "content_index", None)
+        text = getattr(event, "text", None) or ""
+        if (item_id, index) in self.parts_with_text or not text:
+            return None
+        return self._text_event(event, text, message_index)
+
+    def item_done(self, model, item, message_index):
+        "Metadata event for a reasoning item's response.output_item.done"
+        item_id = getattr(item, "id", None)
+        reasoning_event = model._reasoning_event(
+            item, include_text=item_id not in self.items_with_text
+        )
+        reasoning_event.message_index = message_index
+        reasoning_event.part_index = self._part_index(item_id)
+        return self._remember(item_id, reasoning_event)
+
+
 class _SharedResponses(_Shared):
     """Mixin that translates llm.Prompt into Responses API parameters."""
 
@@ -2478,7 +2574,7 @@ class _SharedResponses(_Shared):
                     text = getattr(part, "text", None)
                 if text:
                     bits.append(text)
-        return "".join(bits)
+        return REASONING_SUMMARY_SEPARATOR.join(bits)
 
     def _reasoning_event(self, item, *, include_text=True) -> StreamEvent:
         """Build a redacted-reasoning StreamEvent that carries the opaque
@@ -2842,7 +2938,7 @@ class Responses(_SharedResponses, KeyModel):
             )
             tool_call_meta: dict[str, dict[str, str]] = {}
             final_response_dict: dict[str, Any] | None = None
-            reasoning_items_with_streamed_text = set()
+            reasoning = _StreamedReasoning(response)
             reasoning_done_events: dict[str, StreamEvent] = {}
             server_tool_done_events: dict[str, list[StreamEvent]] = {}
             message_index = 0
@@ -2887,41 +2983,20 @@ class Responses(_SharedResponses, KeyModel):
                     "response.reasoning_summary_text.delta",
                     "response.reasoning_text.delta",
                 ):
-                    item_id = getattr(event, "item_id", None)
-                    if item_id:
-                        reasoning_items_with_streamed_text.add(item_id)
-                    yield StreamEvent(
-                        type="reasoning",
-                        chunk=event.delta or "",
-                        message_index=message_index,
-                    )
+                    yield reasoning.delta(event, message_index)
                 elif etype in (
                     "response.reasoning_summary_text.done",
                     "response.reasoning_text.done",
                 ):
-                    item_id = getattr(event, "item_id", None)
-                    if item_id not in reasoning_items_with_streamed_text:
-                        text = getattr(event, "text", None) or ""
-                        if text:
-                            if item_id:
-                                reasoning_items_with_streamed_text.add(item_id)
-                            yield StreamEvent(
-                                type="reasoning",
-                                chunk=text,
-                                message_index=message_index,
-                            )
+                    done_event = reasoning.done(event, message_index)
+                    if done_event is not None:
+                        yield done_event
                 elif etype == "response.output_item.done":
                     item = event.item
                     if item.type == "reasoning":
                         had_reasoning = True
                         item_id = getattr(item, "id", None)
-                        reasoning_event = self._reasoning_event(
-                            item,
-                            include_text=(
-                                item_id not in reasoning_items_with_streamed_text
-                            ),
-                        )
-                        reasoning_event.message_index = message_index
+                        reasoning_event = reasoning.item_done(self, item, message_index)
                         if item_id:
                             # Retained so the refresh after
                             # response.completed can target the part
@@ -2971,7 +3046,10 @@ class Responses(_SharedResponses, KeyModel):
             events, had_reasoning = self._non_streaming_output_events(
                 completion.output, response
             )
-            yield from events
+            for event in events:
+                if event.type == "reasoning":
+                    event.part_index = _next_part_index(response)
+                yield event
 
         self._set_usage_responses(response, usage)
         # Fallback: usage said reasoning happened but the API gave us no
@@ -3093,7 +3171,7 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
             )
             tool_call_meta: dict[str, dict[str, str]] = {}
             final_response_dict: dict[str, Any] | None = None
-            reasoning_items_with_streamed_text = set()
+            reasoning = _StreamedReasoning(response)
             reasoning_done_events: dict[str, StreamEvent] = {}
             server_tool_done_events: dict[str, list[StreamEvent]] = {}
             message_index = 0
@@ -3138,41 +3216,20 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
                     "response.reasoning_summary_text.delta",
                     "response.reasoning_text.delta",
                 ):
-                    item_id = getattr(event, "item_id", None)
-                    if item_id:
-                        reasoning_items_with_streamed_text.add(item_id)
-                    yield StreamEvent(
-                        type="reasoning",
-                        chunk=event.delta or "",
-                        message_index=message_index,
-                    )
+                    yield reasoning.delta(event, message_index)
                 elif etype in (
                     "response.reasoning_summary_text.done",
                     "response.reasoning_text.done",
                 ):
-                    item_id = getattr(event, "item_id", None)
-                    if item_id not in reasoning_items_with_streamed_text:
-                        text = getattr(event, "text", None) or ""
-                        if text:
-                            if item_id:
-                                reasoning_items_with_streamed_text.add(item_id)
-                            yield StreamEvent(
-                                type="reasoning",
-                                chunk=text,
-                                message_index=message_index,
-                            )
+                    done_event = reasoning.done(event, message_index)
+                    if done_event is not None:
+                        yield done_event
                 elif etype == "response.output_item.done":
                     item = event.item
                     if item.type == "reasoning":
                         had_reasoning = True
                         item_id = getattr(item, "id", None)
-                        reasoning_event = self._reasoning_event(
-                            item,
-                            include_text=(
-                                item_id not in reasoning_items_with_streamed_text
-                            ),
-                        )
-                        reasoning_event.message_index = message_index
+                        reasoning_event = reasoning.item_done(self, item, message_index)
                         if item_id:
                             # Retained so the refresh after
                             # response.completed can target the part
@@ -3225,6 +3282,8 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
                 completion.output, response
             )
             for event in events:
+                if event.type == "reasoning":
+                    event.part_index = _next_part_index(response)
                 yield event
 
         self._set_usage_responses(response, usage)

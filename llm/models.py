@@ -1253,6 +1253,16 @@ class _BaseResponse:
             return "tool_call"
         return event_type
 
+    def _next_part_index(self) -> int:
+        """The part_index a brand new part would get right now.
+
+        A plugin can set this explicitly on an event to start a new part
+        where the auto-allocator would otherwise concatenate it onto the
+        previous same-family part - for example two back-to-back OpenAI
+        reasoning items, each of which carries its own replay metadata.
+        """
+        return self._auto_index_max + 1
+
     def _resolve_part_index(self, event):
         """Mutate event.part_index in place when the plugin left it None.
 
