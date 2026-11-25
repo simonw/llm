@@ -1452,6 +1452,210 @@ def test_responses_reasoning_metadata_refreshed_from_final_payload(httpx2_mock):
     assert reasoning_parts[0].text == "Thinking aloud"
 
 
+def _reasoning_summary_delta(item_id, summary_index, delta):
+    return _responses_sse(
+        "response.reasoning_summary_text.delta",
+        {
+            "item_id": item_id,
+            "output_index": 0,
+            "summary_index": summary_index,
+            "delta": delta,
+            "sequence_number": 1,
+        },
+    )
+
+
+def _reasoning_summary_done(item_id, summary_index, text):
+    return _responses_sse(
+        "response.reasoning_summary_text.done",
+        {
+            "item_id": item_id,
+            "output_index": 0,
+            "summary_index": summary_index,
+            "text": text,
+            "sequence_number": 1,
+        },
+    )
+
+
+def _reasoning_item(item_id, summaries):
+    return {
+        "id": item_id,
+        "type": "reasoning",
+        "summary": [{"type": "summary_text", "text": text} for text in summaries],
+        "encrypted_content": f"encrypted-{item_id}",
+        "status": "completed",
+    }
+
+
+def _reasoning_item_done(item_id, summaries):
+    return _responses_sse(
+        "response.output_item.done",
+        {
+            "item": _reasoning_item(item_id, summaries),
+            "output_index": 0,
+            "sequence_number": 1,
+        },
+    )
+
+
+def _output_text_delta(text):
+    return _responses_sse(
+        "response.output_text.delta",
+        {
+            "item_id": "msg_1",
+            "output_index": 2,
+            "content_index": 0,
+            "delta": text,
+            "logprobs": [],
+            "sequence_number": 1,
+        },
+    )
+
+
+def _multi_part_reasoning_stream(with_deltas=True):
+    # rs_1 has two summary parts, immediately followed by rs_2
+    for item_id, summaries in (
+        ("rs_1", ["**First**\n\nOne.", "**Second**\n\nTwo."]),
+        ("rs_2", ["**Third**\n\nThree."]),
+    ):
+        for summary_index, text in enumerate(summaries):
+            if with_deltas:
+                head, tail = text[:5], text[5:]
+                yield _reasoning_summary_delta(item_id, summary_index, head)
+                yield _reasoning_summary_delta(item_id, summary_index, tail)
+            yield _reasoning_summary_done(item_id, summary_index, text)
+        yield _reasoning_item_done(item_id, summaries)
+    yield _output_text_delta("done")
+
+
+def _reasoning_parts(response):
+    return [
+        p
+        for m in response.messages()
+        for p in m.parts
+        if isinstance(p, llm.parts.ReasoningPart)
+    ]
+
+
+EXPECTED_MULTI_PART_REASONING = [
+    (
+        "**First**\n\nOne.\n\n**Second**\n\nTwo.",
+        "rs_1",
+        "encrypted-rs_1",
+    ),
+    ("**Third**\n\nThree.", "rs_2", "encrypted-rs_2"),
+]
+
+
+@pytest.mark.parametrize("with_deltas", (True, False))
+def test_responses_reasoning_summary_parts_separated(httpx2_mock, with_deltas):
+    """Summary parts of one reasoning item are separated by a blank line
+    (each starts with its own **Heading**), and back-to-back reasoning
+    items stay separate parts so each keeps its own replay metadata."""
+    httpx2_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/responses",
+        stream=IteratorStream(_multi_part_reasoning_stream(with_deltas)),
+        headers={"Content-Type": "text/event-stream"},
+    )
+    httpx2_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/responses",
+        stream=IteratorStream(iter([_output_text_delta("again")])),
+        headers={"Content-Type": "text/event-stream"},
+    )
+
+    conversation = llm.get_model("gpt-5.5").conversation()
+    response = conversation.prompt("hello", key="test")
+    streamed_reasoning = "".join(
+        e.chunk for e in response.stream_events() if e.type == "reasoning"
+    )
+    assert streamed_reasoning == (
+        "**First**\n\nOne.\n\n**Second**\n\nTwo.**Third**\n\nThree."
+    )
+    assert [
+        (
+            p.text,
+            p.provider_metadata["openai"]["id"],
+            p.provider_metadata["openai"]["encrypted_content"],
+        )
+        for p in _reasoning_parts(response)
+    ] == EXPECTED_MULTI_PART_REASONING
+
+    # Both reasoning items are replayed on the next turn
+    conversation.prompt("again", key="test").text()
+    second_request = json.loads(httpx2_mock.get_requests()[-1].content)
+    replayed = [
+        (item["id"], item["encrypted_content"])
+        for item in second_request["input"]
+        if item.get("type") == "reasoning"
+    ]
+    assert replayed == [("rs_1", "encrypted-rs_1"), ("rs_2", "encrypted-rs_2")]
+
+
+@pytest.mark.asyncio
+async def test_async_responses_reasoning_summary_parts_separated(httpx2_mock):
+    httpx2_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/responses",
+        stream=IteratorStream(_multi_part_reasoning_stream()),
+        headers={"Content-Type": "text/event-stream"},
+    )
+    response = llm.get_async_model("gpt-5.5").prompt("hello", key="test")
+    assert await response.text() == "done"
+    messages = await response.messages()
+    assert [
+        (
+            p.text,
+            p.provider_metadata["openai"]["id"],
+            p.provider_metadata["openai"]["encrypted_content"],
+        )
+        for m in messages
+        for p in m.parts
+        if isinstance(p, llm.parts.ReasoningPart)
+    ] == EXPECTED_MULTI_PART_REASONING
+
+
+def test_responses_non_streaming_reasoning_summary_parts_separated(httpx2_mock):
+    httpx2_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/responses",
+        json={
+            "id": "resp_reasoning",
+            "object": "response",
+            "created_at": 1,
+            "model": "gpt-5.5",
+            "output": [
+                _reasoning_item("rs_1", ["**First**\n\nOne.", "**Second**\n\nTwo."]),
+                _reasoning_item("rs_2", ["**Third**\n\nThree."]),
+                {
+                    "type": "message",
+                    "id": "msg_1",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [
+                        {"type": "output_text", "text": "done", "annotations": []}
+                    ],
+                },
+            ],
+            "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
+            "status": "completed",
+        },
+        headers={"Content-Type": "application/json"},
+    )
+    response = llm.get_model("gpt-5.5").prompt("hello", stream=False, key="test")
+    assert response.text() == "done"
+    assert [
+        (
+            p.text,
+            p.provider_metadata["openai"]["id"],
+            p.provider_metadata["openai"]["encrypted_content"],
+        )
+        for p in _reasoning_parts(response)
+    ] == EXPECTED_MULTI_PART_REASONING
+
+
 def test_code_interpreter_multi_message_response(httpx2_mock):
     """Server-side tool execution interleaving multiple message output
     items must assemble into multiple assistant Messages."""
