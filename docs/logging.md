@@ -132,6 +132,9 @@ Example output:
   system: Formatting re-enabled. Write a detailed README with extensive usage examples.
   prompt: <documents> <document index="1"> <source>./Cargo.toml</source> <document_content> [package] name = "py-limbo" version...
 ```
+
+A log entry without a recorded timestamp displays `Unknown time` in Markdown and `datetime: null` in short YAML.
+
 Include `-u/--usage` to include token usage information:
 
 ```bash
