@@ -317,6 +317,15 @@ def test_schema_dsl_duplicate_field_name():
     assert str(ex.value) == "Invalid schema DSL: duplicate field name 'name'"
 
 
+@pytest.mark.parametrize(
+    "schema",
+    ("name, age int active bool", "name\nage int extra: their age"),
+)
+def test_schema_dsl_rejects_extra_tokens_before_description(schema):
+    with pytest.raises(ValueError, match=r"expected a field name and at most one type"):
+        schema_dsl(schema)
+
+
 def test_resolve_schema_input_invalid_dsl_raises_bad_parameter():
     with pytest.raises(click.BadParameter) as ex:
         resolve_schema_input(None, "name, age badtype", load_template=None)

@@ -440,6 +440,11 @@ def schema_dsl(schema_dsl: str, multi: bool = False) -> dict[str, Any]:
             raise ValueError(
                 f"Invalid schema DSL: field {field!r} is missing a name before ':'"
             )
+        if len(field_parts) > 2:
+            raise ValueError(
+                "Invalid schema DSL: expected a field name and at most one type "
+                f"in {field!r}. Separate fields with commas or newlines."
+            )
         field_name = field_parts[0].strip()
 
         # Default type is string
