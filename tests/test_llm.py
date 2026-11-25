@@ -826,19 +826,32 @@ def test_schema_using_dsl(db_factory, mock_model, tmpdir, monkeypatch, args, exp
     assert json.loads(rows[0]["content"]) == expected
 
 
-def test_schema_using_invalid_dsl(tmpdir, monkeypatch):
+@pytest.mark.parametrize(
+    "schema, expected_error",
+    [
+        ("name, age badtype", "unknown type 'badtype' for field 'age'"),
+        (
+            "name, age int active bool",
+            "expected a field name and at most one type in 'age int active bool'",
+        ),
+    ],
+)
+def test_schema_using_invalid_dsl(
+    tmpdir, monkeypatch, mock_model, schema, expected_error
+):
     monkeypatch.setenv("LLM_USER_PATH", str(tmpdir / "user"))
+    mock_model.enqueue(["unexpected model response"])
     result = CliRunner().invoke(
         cli,
-        ["prompt", "--schema", "name, age badtype", "test"],
+        ["prompt", "-m", "mock", "--schema", schema, "test"],
         catch_exceptions=False,
     )
     assert result.exit_code == 2
     assert (
-        "Error: Invalid value: Invalid schema DSL: unknown type 'badtype' "
-        "for field 'age'"
-    ) in result.output
+        f"Error: Invalid value: Invalid schema DSL: {expected_error}" in result.output
+    )
     assert "Traceback" not in result.output
+    assert mock_model.history == []
 
 
 @pytest.mark.asyncio
