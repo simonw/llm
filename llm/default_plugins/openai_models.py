@@ -1593,6 +1593,11 @@ class _Shared:
             input=input_tokens, output=output_tokens, details=simplify_usage_dict(usage)
         )
 
+    def set_resolved_model(self, response):
+        model = (response.response_json or {}).get("model")
+        if isinstance(model, str) and model and model != self.model_id:
+            response.set_resolved_model(model)
+
     def get_client(self, key, *, async_=False):
         kwargs = {}
         if self.api_base:
@@ -1803,6 +1808,7 @@ class Chat(_Shared, KeyModel):
                     chunk=completion.choices[0].message.content,
                 )
         self.set_usage(response, usage)
+        self.set_resolved_model(response)
         if usage and (usage.get("completion_tokens_details") or {}).get(
             "reasoning_tokens"
         ):
@@ -1920,6 +1926,7 @@ class AsyncChat(_Shared, AsyncKeyModel):
                     chunk=completion.choices[0].message.content,
                 )
         self.set_usage(response, usage)
+        self.set_resolved_model(response)
         if usage and (usage.get("completion_tokens_details") or {}).get(
             "reasoning_tokens"
         ):
@@ -2974,6 +2981,7 @@ class Responses(_SharedResponses, KeyModel):
             yield from events
 
         self._set_usage_responses(response, usage)
+        self.set_resolved_model(response)
         # Fallback: usage said reasoning happened but the API gave us no
         # reasoning items to harvest encrypted_content from. Emit the
         # opaque "reasoning happened" marker for UI / token accounting.
@@ -3228,6 +3236,7 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
                 yield event
 
         self._set_usage_responses(response, usage)
+        self.set_resolved_model(response)
         if (
             not had_reasoning
             and usage
@@ -3311,6 +3320,7 @@ class Completion(Chat):
             )
             response.response_json = remove_dict_none_values(completion.model_dump())
             yield completion.choices[0].text
+        self.set_resolved_model(response)
         response._prompt_json = redact_data({"messages": messages})
 
 
