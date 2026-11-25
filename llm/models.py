@@ -537,7 +537,8 @@ class Prompt:
         if schema and not isinstance(schema, dict) and issubclass(schema, BaseModel):
             schema = schema.model_json_schema()
         self.schema = schema
-        self.tools = _wrap_tools(tools or [])
+        self._tool_definitions = list(tools or [])
+        self.tools = _wrap_tools(self._tool_definitions)
         self.tool_results = tool_results or []
         self.options = options or model.Options()
         self.hide_reasoning = hide_reasoning
@@ -1945,6 +1946,20 @@ class Response(_BaseResponse):
     def text_or_raise(self) -> str:
         return self.text()
 
+    def _prepare_tools(self):
+        toolboxes = [
+            tool for tool in self.prompt._tool_definitions if isinstance(tool, Toolbox)
+        ]
+        for toolbox in toolboxes:
+            if not toolbox._prepared:
+                toolbox.prepare()
+                toolbox._prepared = True
+        if toolboxes:
+            self.prompt.tools = _wrap_tools(self.prompt._tool_definitions)
+            function_tools, _ = _partition_tools(self.model, self.prompt.tools)
+            if function_tools and not self.model.supports_tools:
+                raise ValueError(f"{self.model} does not support tools")
+
     def execute_tool_calls(
         self,
         *,
@@ -1962,6 +1977,8 @@ class Response(_BaseResponse):
         list instead of ``self.prompt.tools`` (used when a rehydrated
         response has pending calls but no tool implementations).
         """
+        if tools is None:
+            self._prepare_tools()
         tool_results = []
         effective_tools = _wrap_tools(tools) if tools is not None else self.prompt.tools
         tools_by_name = {
@@ -2120,6 +2137,7 @@ class Response(_BaseResponse):
         """Drive self.model.execute() once and yield each raw chunk it
         produces. Callers normalize chunks through _process_chunk.
         """
+        self._prepare_tools()
         if isinstance(self.model, Model):
             generator = self.model.execute(
                 self.prompt,
@@ -3017,6 +3035,7 @@ class ChainResponse(_BaseChainResponse):
             before_call=self.before_call,
             after_call=self.after_call,
         )
+        initial_response._prepare_tools()
         # Resume: a history ending in unresolved tool calls means a
         # previous run stopped (paused or crashed) before executing
         # them. Execute those calls first - through the normal
