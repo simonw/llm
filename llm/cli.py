@@ -2157,6 +2157,9 @@ def logs_list(
         should_show_conversation = True
         seen_tool_hashes = set()
         for row in rows:
+            datetime_utc = row["datetime_utc"]
+            if datetime_utc is not None:
+                datetime_utc = datetime_utc.split(".", 1)[0]
             if short:
                 system = truncate_string(
                     row["system"] or "", 120, normalize_whitespace=True
@@ -2168,7 +2171,7 @@ def logs_list(
                 attachments = attachments_by_id.get(row["id"])
                 obj = {
                     "model": row["model"],
-                    "datetime": row["datetime_utc"].split(".")[0],
+                    "datetime": datetime_utc,
                     "duration_ms": row["duration_ms"],
                     "conversation": cid,
                 }
@@ -2213,33 +2216,15 @@ def logs_list(
                     obj["usage"] = usage_details
                 click.echo(yaml.dump([obj], sort_keys=False).strip())
                 continue
-            # Not short, output Markdown
-            click.echo(
-                "# {}{}\n{}".format(
-                    row["datetime_utc"].split(".")[0],
-                    (
-                        "    conversation: {} id: {}".format(
-                            row["conversation_id"], row["id"]
-                        )
-                        if should_show_conversation
-                        else ""
-                    ),
-                    (
-                        (
-                            "\nModel: **{}**{}\n".format(
-                                row["model"],
-                                (
-                                    " (resolved: **{}**)".format(row["resolved_model"])
-                                    if row["resolved_model"]
-                                    else ""
-                                ),
-                            )
-                        )
-                        if should_show_conversation
-                        else ""
-                    ),
-                )
+            heading = (
+                f"# {datetime_utc if datetime_utc is not None else 'Unknown time'}"
             )
+            if should_show_conversation:
+                heading += f"    conversation: {row['conversation_id']} id: {row['id']}"
+                heading += f"\n\nModel: **{row['model']}**"
+                if row["resolved_model"]:
+                    heading += f" (resolved: **{row['resolved_model']}**)"
+            click.echo(f"{heading}\n")
             # In conversation log mode only show it for the first one
             if conversation_id:
                 should_show_conversation = False
