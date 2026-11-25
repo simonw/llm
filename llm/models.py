@@ -183,14 +183,18 @@ class Tool:
          - Building a Pydantic model for inputs by inspecting the function signature
          - Building a Pydantic model for the return value by using the function's return annotation
         """
-        if not name and function.__name__ == "<lambda>":
+        definition = _callable_definition(function)
+        function_name = (
+            type(function).__name__ if definition is not function else function.__name__
+        )
+        if not name and function_name == "<lambda>":
             raise ValueError(
                 "Cannot create a Tool from a lambda function without providing name="
             )
 
         return cls(
-            name=name or function.__name__,
-            description=description or function.__doc__ or None,
+            name=name or function_name,
+            description=description or definition.__doc__ or None,
             input_schema=_get_arguments_input_schema(function, name),
             implementation=function,
         )
@@ -265,9 +269,19 @@ class ServerSideTool:
         return hashlib.sha256(json.dumps(to_hash).encode("utf-8")).hexdigest()
 
 
+def _callable_definition(function):
+    if (
+        inspect.isroutine(function)
+        or inspect.isclass(function)
+        or isinstance(function, functools.partial)
+    ):
+        return function
+    return function.__call__
+
+
 def _get_arguments_input_schema(function, name):
     signature = inspect.signature(function)
-    type_hints = get_type_hints(function)
+    type_hints = get_type_hints(_callable_definition(function))
     fields = {}
     for param_name, param in signature.parameters.items():
         if param_name in ("self", "llm_tool_call"):
