@@ -236,6 +236,16 @@ def test_templates_error_on_missing_schema(templates_path):
             None,
             None,
         ),
+        pytest.param(
+            "prompt: 'Summarize this: ${input}'",
+            "Input text",
+            ["-m", "gpt-4o-mini"],
+            "gpt-4o-mini",
+            "Summarize this: Input text",
+            None,
+            None,
+            id="braced-input",
+        ),
         (
             "prompt: 'Summarize this: $input'\nmodel: gpt-4o",
             "Input text",
@@ -277,6 +287,17 @@ def test_templates_error_on_missing_schema(templates_path):
             "Error: Missing variables: hello",
             None,
             marks=pytest.mark.httpx2_mock(),
+        ),
+        pytest.param(
+            "system: 'Greet ${name}'",
+            "Input text",
+            [],
+            None,
+            None,
+            "Error: Missing variables: name",
+            None,
+            marks=pytest.mark.httpx2_mock(assert_all_responses_were_requested=False),
+            id="missing-braced-parameter",
         ),
         # Template generated prompt should combine with CLI prompt
         (
