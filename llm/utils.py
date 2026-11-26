@@ -443,13 +443,13 @@ def schema_dsl(schema_dsl: str, multi: bool = False) -> dict[str, Any]:
         field_name = field_parts[0].strip()
 
         # Default type is string
-        field_type = "string"
+        field_type: str | list[str] = "string"
 
         # If type is specified, use it
         if len(field_parts) > 1:
             type_indicator = field_parts[1].strip()
             try:
-                field_type = type_mapping[type_indicator]
+                field_type = type_mapping[type_indicator.removesuffix("?")]
             except KeyError:
                 # 'from None' hides the internal mapping KeyError from the
                 # user-facing traceback:
@@ -457,6 +457,8 @@ def schema_dsl(schema_dsl: str, multi: bool = False) -> dict[str, Any]:
                     f"Invalid schema DSL: unknown type {type_indicator!r} "
                     f"for field {field_name!r}"
                 ) from None
+            if type_indicator.endswith("?"):
+                field_type = [field_type, "null"]
 
         if field_name in json_schema["properties"]:
             raise ValueError(f"Invalid schema DSL: duplicate field name {field_name!r}")

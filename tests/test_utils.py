@@ -226,6 +226,33 @@ def test_extract_fenced_code_block(input, last, expected):
                 "required": ["name", "age", "bio"],
             },
         ),
+        (
+            "name str?, age int?: Age if known, score float?, active bool?, note",
+            {
+                "type": "object",
+                "properties": {
+                    "name": {"type": ["string", "null"]},
+                    "age": {
+                        "type": ["integer", "null"],
+                        "description": "Age if known",
+                    },
+                    "score": {"type": ["number", "null"]},
+                    "active": {"type": ["boolean", "null"]},
+                    "note": {"type": "string"},
+                },
+                "required": ["name", "age", "score", "active", "note"],
+            },
+        ),
+        (
+            "name?: Is the name known?",
+            {
+                "type": "object",
+                "properties": {
+                    "name?": {"type": "string", "description": "Is the name known?"}
+                },
+                "required": ["name?"],
+            },
+        ),
         # Test case 6: Empty schema
         ("", {"type": "object", "properties": {}, "required": []}),
         # Test case 7: Explicit string type
@@ -301,6 +328,9 @@ def test_schema_dsl_missing_field_name(schema, invalid_field):
         ("name string", "name", "string"),
         ("name, age integer", "age", "integer"),
         ("active boolean: whether active", "active", "boolean"),
+        ("name string?", "name", "string?"),
+        ("age int??", "age", "int??"),
+        ("name ?", "name", "?"),
     ),
 )
 def test_schema_dsl_unknown_type(schema, field_name, unknown_type):
