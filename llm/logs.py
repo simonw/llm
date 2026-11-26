@@ -1460,9 +1460,9 @@ def log_rows(
             )""")
         params[key] = fragment_hash
 
-    # A turn "used" a tool when a tool result was among its inputs,
-    # matching what -T has always meant: the result came back and was
-    # fed to the model. The result sits in the turn's parent message.
+    # A turn "used" a tool when a tool result appears in its own input
+    # segment (local tools fed back to the model) or output segment
+    # (server-executed tools whose results arrive in the response).
     if any_tools:
         where.append(_tool_result_clause())
     for index, tool_name in enumerate(tool_names):
@@ -1496,18 +1496,49 @@ def log_rows(
 
 
 def _tool_result_clause(extra: str = "") -> str:
-    # A turn's tool results sit either in its parent message directly,
-    # or - when a fresh user prompt followed the results - in the
-    # parent's own parent, one step further up the same input segment.
-    return f"""(turns.parent_message_hash in (
-        select parts.message_hash from parts
-        where parts.type = 'tool_result' {extra}
-    ) or turns.parent_message_hash in (
-        select messages.hash from messages
-        join parts on parts.message_hash = messages.parent_hash
-        where messages.role = 'user'
-        and parts.type = 'tool_result' {extra}
-    ))"""
+    # Walk the same input and output segments as _LogRowBuilder.build:
+    # the trailing run of user/tool messages ending at parent_message_hash
+    # (stopping at the previous assistant or system message), and the
+    # turn's own output messages from tip_message_hash back to
+    # parent_message_hash.
+    return f"""exists (
+        with recursive input_messages(hash, parent_hash) as (
+            select messages.hash, messages.parent_hash
+              from messages
+             where messages.hash = turns.parent_message_hash
+               and messages.role in ('user', 'tool')
+            union all
+            select messages.hash, messages.parent_hash
+              from input_messages im
+              join messages on messages.hash = im.parent_hash
+             where messages.role in ('user', 'tool')
+        ),
+        output_messages(hash, parent_hash) as (
+            select messages.hash, messages.parent_hash
+              from messages
+             where messages.hash = turns.tip_message_hash
+               and (turns.parent_message_hash is null
+                    or turns.tip_message_hash != turns.parent_message_hash)
+            union all
+            select messages.hash, messages.parent_hash
+              from output_messages om
+              join messages on messages.hash = om.parent_hash
+             where turns.parent_message_hash is null
+                or messages.hash != turns.parent_message_hash
+        )
+        select 1
+          from (
+              select hash from input_messages
+              union all
+              select hash from output_messages
+          ) as segment
+         where exists (
+             select 1
+               from parts
+              where parts.message_hash = segment.hash
+                and parts.type = 'tool_result' {extra}
+         )
+    )"""
 
 
 def log_row_extras(store: "LogStore", row: dict) -> dict:
