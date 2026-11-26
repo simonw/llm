@@ -1146,6 +1146,312 @@ class TestTurnInputBoundary:
         assert merged_log_rows(store, tool_names=["other"]) == []
 
 
+class TestToolResultFilters:
+    """`llm logs --tools` and `-T` match every tool result belonging to
+    a turn: local results in its trailing user/tool input segment
+    (stopping at the preceding assistant or system message) and
+    server-executed results in its output segment."""
+
+    @staticmethod
+    def _server_tool_events(
+        name: str,
+        output: str,
+        tool_call_id: str,
+        *,
+        args: str | None = None,
+        message_index: int = 0,
+    ) -> list[llm.parts.StreamEvent]:
+        events = [
+            llm.parts.StreamEvent(
+                type="tool_call_name",
+                chunk=name,
+                tool_call_id=tool_call_id,
+                server_executed=True,
+                message_index=message_index,
+            )
+        ]
+        if args is not None:
+            events.append(
+                llm.parts.StreamEvent(
+                    type="tool_call_args",
+                    chunk=args,
+                    tool_call_id=tool_call_id,
+                    server_executed=True,
+                    message_index=message_index,
+                )
+            )
+        events.append(
+            llm.parts.StreamEvent(
+                type="tool_result",
+                chunk=output,
+                tool_name=name,
+                tool_call_id=tool_call_id,
+                server_executed=True,
+                message_index=message_index,
+            )
+        )
+        return events
+
+    def test_server_executed_tool_result_matches_filters(self, store, mock_model):
+        conv = mock_model.conversation()
+        mock_model.enqueue(
+            [
+                *self._server_tool_events(
+                    "shell", "/tmp", "tc_srv_1", args='{"cmd": "pwd"}'
+                ),
+                llm.parts.StreamEvent(type="text", chunk="In /tmp"),
+            ]
+        )
+        r1 = conv.prompt("where am i?")
+        r1.text()
+        r1.log_to_db(store.db)
+
+        # A follow-up turn in the same conversation without any tools
+        # must not inherit Turn 1's server-executed tool result.
+        mock_model.enqueue(["you are welcome"])
+        r2 = conv.prompt("thanks")
+        r2.text()
+        r2.log_to_db(store.db)
+
+        assert [row["id"] for row in merged_log_rows(store, any_tools=True)] == [r1.id]
+        assert [row["id"] for row in merged_log_rows(store, tool_names=["shell"])] == [
+            r1.id
+        ]
+        assert merged_log_rows(store, tool_names=["other"]) == []
+
+    def test_multi_message_server_executed_output_matches_all_tools(
+        self, store, mock_model
+    ):
+        mock_model.enqueue(
+            [
+                *self._server_tool_events(
+                    "web_search", "hits", "tc_ws", message_index=0
+                ),
+                *self._server_tool_events("shell", "42", "tc_sh", message_index=1),
+                llm.parts.StreamEvent(type="text", chunk="Answer: 42", message_index=2),
+            ]
+        )
+        r = mock_model.prompt("search and compute")
+        r.text()
+        r.log_to_db(store.db)
+
+        assert [row["id"] for row in merged_log_rows(store, any_tools=True)] == [r.id]
+        assert [
+            row["id"] for row in merged_log_rows(store, tool_names=["web_search"])
+        ] == [r.id]
+        assert [row["id"] for row in merged_log_rows(store, tool_names=["shell"])] == [
+            r.id
+        ]
+        assert [
+            row["id"]
+            for row in merged_log_rows(store, tool_names=["web_search", "shell"])
+        ] == [r.id]
+        assert merged_log_rows(store, tool_names=["web_search", "missing"]) == []
+
+    def test_multi_message_local_input_segment_and_boundary(self, store, mock_model):
+        mock_model.enqueue(["turn 1 reply"])
+        r1 = mock_model.prompt(
+            "first",
+            messages=[llm.user("start"), llm.assistant("calling earlier")],
+            tool_results=[
+                llm.ToolResult(name="earlier_tool", output="old", tool_call_id="tc_old")
+            ],
+        )
+        r1.text()
+        r1.log_to_db(store.db)
+
+        # Turn 2 has two separate tool messages followed by a user message
+        # after Turn 1's assistant reply.
+        mock_model.enqueue(["turn 2 reply"])
+        r2 = mock_model.prompt(
+            "summarize both",
+            messages=[
+                *r1.prompt.messages,
+                *r1.messages(),
+                llm.tool_message(
+                    ToolResultPart(name="alpha", output="a", tool_call_id="tc_a")
+                ),
+                llm.tool_message(
+                    ToolResultPart(name="beta", output="b", tool_call_id="tc_b")
+                ),
+            ],
+        )
+        r2.text()
+        r2.log_to_db(store.db)
+
+        assert [row["id"] for row in merged_log_rows(store, tool_names=["alpha"])] == [
+            r2.id
+        ]
+        assert [row["id"] for row in merged_log_rows(store, tool_names=["beta"])] == [
+            r2.id
+        ]
+        assert [
+            row["id"] for row in merged_log_rows(store, tool_names=["alpha", "beta"])
+        ] == [r2.id]
+        # Turn 1's tool result sits before the assistant boundary and must
+        # not leak into Turn 2.
+        assert [
+            row["id"] for row in merged_log_rows(store, tool_names=["earlier_tool"])
+        ] == [r1.id]
+
+    def test_mixed_local_and_server_executed_tools_in_one_turn(self, store, mock_model):
+        mock_model.enqueue(
+            [
+                *self._server_tool_events("web_search", "docs", "tc_ws"),
+                llm.parts.StreamEvent(type="text", chunk="combined"),
+            ]
+        )
+        r = mock_model.prompt(
+            messages=[llm.user("hi"), llm.assistant("calling local")],
+            tool_results=[
+                llm.ToolResult(name="local_fn", output="ok", tool_call_id="tc_loc")
+            ],
+        )
+        r.text()
+        r.log_to_db(store.db)
+
+        assert [
+            row["id"]
+            for row in merged_log_rows(store, tool_names=["local_fn", "web_search"])
+        ] == [r.id]
+
+    def test_empty_output_turn_does_not_bleed_prior_server_tool(
+        self, store, mock_model
+    ):
+        conv = mock_model.conversation()
+        mock_model.enqueue(
+            [
+                *self._server_tool_events("shell", "ok", "tc_srv_1"),
+                llm.parts.StreamEvent(type="text", chunk="done"),
+            ]
+        )
+        r1 = conv.prompt("run it")
+        r1.text()
+        r1.log_to_db(store.db)
+
+        mock_model.enqueue([])
+        r2 = conv.prompt("quiet follow-up")
+        r2.text()
+        r2.log_to_db(store.db)
+
+        turn2 = store.db["turns"].get(r2.id)
+        assert turn2["tip_message_hash"] == turn2["parent_message_hash"]
+        assert [row["id"] for row in merged_log_rows(store, any_tools=True)] == [r1.id]
+        assert [row["id"] for row in merged_log_rows(store, tool_names=["shell"])] == [
+            r1.id
+        ]
+
+    def test_null_parent_turn_with_server_tool_matches(self, store, mock_model):
+        mock_model.enqueue(
+            [
+                *self._server_tool_events("shell", "ok", "tc_srv_null_parent"),
+                llm.parts.StreamEvent(type="text", chunk="done"),
+            ]
+        )
+        r = mock_model.prompt(messages=[])
+        r.text()
+        r.log_to_db(store.db)
+
+        assert store.db["turns"].get(r.id)["parent_message_hash"] is None
+        assert [row["id"] for row in merged_log_rows(store, any_tools=True)] == [r.id]
+        assert [row["id"] for row in merged_log_rows(store, tool_names=["shell"])] == [
+            r.id
+        ]
+
+    def test_tool_call_without_result_does_not_match(self, store, mock_model):
+        mock_model.enqueue(
+            [
+                llm.parts.StreamEvent(
+                    type="tool_call_name",
+                    chunk="demo",
+                    tool_call_id="tc_pending",
+                ),
+                llm.parts.StreamEvent(
+                    type="tool_call_args",
+                    chunk="{}",
+                    tool_call_id="tc_pending",
+                ),
+            ]
+        )
+        r = mock_model.prompt("call demo")
+        r.text()
+        r.log_to_db(store.db)
+
+        assert merged_log_rows(store, any_tools=True) == []
+        assert merged_log_rows(store, tool_names=["demo"]) == []
+
+    def test_tool_filter_with_query_across_new_and_legacy_rows(self, store, mock_model):
+        db = store.db
+        legacy_id = "01000000000000000000000001"
+        db["conversations"].insert(
+            {"id": "c_legacy", "name": "legacy", "model": "echo"}
+        )
+        tool_id = (
+            db["tools"]
+            .insert(
+                {
+                    "hash": "legacy-shell-hash",
+                    "name": "shell",
+                    "description": "run shell",
+                    "input_schema": "{}",
+                    "plugin": None,
+                }
+            )
+            .last_pk
+        )
+        db["responses"].insert(
+            {
+                "id": legacy_id,
+                "model": "echo",
+                "prompt": "legacy zebra check",
+                "system": None,
+                "prompt_json": None,
+                "options_json": "{}",
+                "response": "legacy ok",
+                "response_json": None,
+                "conversation_id": "c_legacy",
+                "duration_ms": 1,
+                "datetime_utc": "2025-01-01T00:00:00+00:00",
+            }
+        )
+        db["tool_results"].insert(
+            {
+                "response_id": legacy_id,
+                "tool_id": tool_id,
+                "name": "shell",
+                "output": "legacy out",
+                "tool_call_id": "tc_legacy_1",
+            }
+        )
+
+        mock_model.enqueue(
+            [
+                *self._server_tool_events("shell", "new out", "tc_new_1"),
+                llm.parts.StreamEvent(type="text", chunk="new zebra answer"),
+            ]
+        )
+        r_new = mock_model.prompt("new zebra check")
+        r_new.text()
+        r_new.log_to_db(db)
+
+        mock_model.enqueue(["plain zebra answer"])
+        r_plain = mock_model.prompt("plain zebra check")
+        r_plain.text()
+        r_plain.log_to_db(db)
+
+        any_ids = [
+            row["id"] for row in merged_log_rows(store, query="zebra", any_tools=True)
+        ]
+        named_ids = [
+            row["id"]
+            for row in merged_log_rows(store, query="zebra", tool_names=["shell"])
+        ]
+        assert set(any_ids) == {r_new.id, legacy_id}
+        assert set(named_ids) == {r_new.id, legacy_id}
+        assert r_plain.id not in any_ids
+        assert r_plain.id not in named_ids
+
+
 class TestUnsupportedBranchDatabases:
     def test_existing_message_store_tables_fail_loudly(self, db_factory, tmp_path):
         # The message store migration creates its tables in final form

@@ -1395,6 +1395,31 @@ def test_logs_server_side_tool_results(logs_db, mock_model):
     assert short_result.exit_code == 0
     assert "shell: 17711" in short_result.output
 
+    # --tools and -T filters match server-executed tool results without matching
+    # ordinary turns
+    mock_model.enqueue(["just text"])
+    plain_response = mock_model.prompt("no tools here")
+    plain_response.text()
+    plain_response.log_to_db(logs_db)
+
+    tools_result = runner.invoke(
+        cli, ["logs", "--tools", "--json"], catch_exceptions=False
+    )
+    assert tools_result.exit_code == 0
+    assert [r["id"] for r in json.loads(tools_result.output)] == [response.id]
+
+    by_name_result = runner.invoke(
+        cli, ["logs", "-T", "shell", "--json"], catch_exceptions=False
+    )
+    assert by_name_result.exit_code == 0
+    assert [r["id"] for r in json.loads(by_name_result.output)] == [response.id]
+
+    missing_result = runner.invoke(
+        cli, ["logs", "-T", "other", "--json"], catch_exceptions=False
+    )
+    assert missing_result.exit_code == 0
+    assert json.loads(missing_result.output) == []
+
 
 def test_logs_legacy_tool_result_attachment_bytes(logs_db):
     """A legacy tool result can record its attachment bytes as a BLOB.
