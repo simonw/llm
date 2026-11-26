@@ -474,6 +474,8 @@ You can include type information by adding a type indicator after the property n
 
 Supported types are `int` for integers, `float` for floating point numbers, `str` for strings (the default) and `bool` for true/false booleans.
 
+Add `?` to a type to allow a `null` value. For example, `name, age int?` still requires both fields, and `{"name": "Sam", "age": null}` is valid when the age is unknown. Use `str?` for a nullable string.
+
 To include a description of the field to act as a hint to the model, add one after a colon:
 
     name: the person's name, age int: their age, bio: a short bio
