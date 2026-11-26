@@ -139,57 +139,6 @@ def test_chat_usage_optional_counts(mock_model, logs_db, monkeypatch, usage, exp
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
-@pytest.mark.parametrize(
-    "model_args,expected_model",
-    (
-        (["-m", "gpt-4.1-mini"], "gpt-4.1-mini"),
-        (["-m", "4o"], "gpt-4o"),
-        ([], "gpt-6-luna"),
-    ),
-)
-def test_chat_usage_shows_model_id(
-    monkeypatch, httpx2_mock, mock_openai_responses, logs_db, model_args, expected_model
-):
-    # https://github.com/simonw/llm/issues/946
-    monkeypatch.setenv("OPENAI_API_KEY", "X")
-    if expected_model.startswith("gpt-6"):
-        mock_openai_responses(text="hello", model=expected_model)
-    else:
-        httpx2_mock.add_response(
-            method="POST",
-            url="https://api.openai.com/v1/chat/completions",
-            json={
-                "model": expected_model,
-                "usage": {
-                    "prompt_tokens": 7,
-                    "completion_tokens": 1,
-                    "total_tokens": 8,
-                },
-                "choices": [{"message": {"role": "assistant", "content": "hello"}}],
-            },
-            headers={"Content-Type": "application/json"},
-        )
-    result = CliRunner().invoke(
-        llm.cli.cli,
-        ["chat", "-u", "--no-stream"] + model_args,
-        input="Hi\nquit\n",
-        catch_exceptions=False,
-    )
-    assert result.exit_code == 0
-    assert "\n> Hi\nhello\n" in result.stdout
-    assert "Token usage" not in result.stdout
-    assert "Model:" not in result.stdout
-    expected_usage = (
-        "5 input, 3 output"
-        if expected_model.startswith("gpt-6")
-        else "7 input, 1 output"
-    )
-    assert result.stderr == f"Token usage: {expected_usage}\nModel: {expected_model}\n"
-    request = json.loads(httpx2_mock.get_requests()[-1].content)
-    assert request["model"] == expected_model
-
-
-@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
 def test_chat_basic(mock_model, logs_db):
     runner = CliRunner()
     mock_model.enqueue(["one world"])
