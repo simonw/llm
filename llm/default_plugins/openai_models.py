@@ -1753,12 +1753,16 @@ class Chat(_Shared, KeyModel):
                             )
                 try:
                     content = chunk.choices[0].delta.content
+                    refusal = chunk.choices[0].delta.refusal
                 except IndexError:
                     content = None
+                    refusal = None
                 if content:
                     # Empty strings are noise (OpenAI's first chunk
                     # with role=assistant has content="").
                     yield StreamEvent(type="text", chunk=content)
+                if refusal:
+                    yield StreamEvent(type="text", chunk=refusal)
             response.response_json = remove_dict_none_values(combine_chunks(chunks))
             if tool_calls:
                 for value in tool_calls.values():
@@ -1801,6 +1805,10 @@ class Chat(_Shared, KeyModel):
                 yield StreamEvent(
                     type="text",
                     chunk=completion.choices[0].message.content,
+                )
+            if completion.choices[0].message.refusal:
+                yield StreamEvent(
+                    type="text", chunk=completion.choices[0].message.refusal
                 )
         self.set_usage(response, usage)
         if usage and (usage.get("completion_tokens_details") or {}).get(
@@ -1872,10 +1880,14 @@ class AsyncChat(_Shared, AsyncKeyModel):
                             )
                 try:
                     content = chunk.choices[0].delta.content
+                    refusal = chunk.choices[0].delta.refusal
                 except IndexError:
                     content = None
+                    refusal = None
                 if content:
                     yield StreamEvent(type="text", chunk=content)
+                if refusal:
+                    yield StreamEvent(type="text", chunk=refusal)
             if tool_calls:
                 for value in tool_calls.values():
                     response.add_tool_call(
@@ -1918,6 +1930,10 @@ class AsyncChat(_Shared, AsyncKeyModel):
                 yield StreamEvent(
                     type="text",
                     chunk=completion.choices[0].message.content,
+                )
+            if completion.choices[0].message.refusal:
+                yield StreamEvent(
+                    type="text", chunk=completion.choices[0].message.refusal
                 )
         self.set_usage(response, usage)
         if usage and (usage.get("completion_tokens_details") or {}).get(
@@ -3320,6 +3336,7 @@ def not_nulls(data) -> dict:
 
 def combine_chunks(chunks: list) -> dict:
     content = ""
+    refusal = ""
     role = None
     finish_reason = None
     # If any of them have log probability, we're going to persist
@@ -3345,6 +3362,8 @@ def combine_chunks(chunks: list) -> dict:
             role = choice.delta.role
             if choice.delta.content is not None:
                 content += choice.delta.content
+            if choice.delta.refusal is not None:
+                refusal += choice.delta.refusal
             if choice.finish_reason is not None:
                 finish_reason = choice.finish_reason
 
@@ -3355,6 +3374,8 @@ def combine_chunks(chunks: list) -> dict:
         "finish_reason": finish_reason,
         "usage": usage,
     }
+    if refusal:
+        combined["refusal"] = refusal
     if logprobs:
         combined["logprobs"] = logprobs
     if chunks:

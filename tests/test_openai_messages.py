@@ -1,9 +1,11 @@
 import json
 
 import pytest
+from click.testing import CliRunner
 from pytest_httpx2 import IteratorStream
 
 import llm
+from llm.cli import cli
 from llm.default_plugins.openai_models import Chat
 from llm.models import Prompt
 
@@ -31,6 +33,93 @@ def _text_stream():
     yield _sse({"content": "lo"})
     yield _sse({}, finish_reason="stop")
     yield b"data: [DONE]\n\n"
+
+
+def _mock_chat_refusal(httpx2_mock, stream, content=None):
+    refusal = "I cannot help with that request."
+    if stream:
+        httpx2_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            stream=IteratorStream(
+                [
+                    _sse({"role": "assistant", "content": ""}),
+                    _sse({"refusal": "I cannot help "}),
+                    _sse({"refusal": "with that request."}),
+                    _sse({}, finish_reason="stop"),
+                    b"data: [DONE]\n\n",
+                ]
+            ),
+            headers={"Content-Type": "text/event-stream"},
+        )
+    else:
+        httpx2_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            json={
+                "model": "gpt-4o-mini",
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": content,
+                            "refusal": refusal,
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+            },
+        )
+    return refusal
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("async_", (False, True))
+@pytest.mark.parametrize("stream", (False, True))
+@pytest.mark.parametrize("model_id", ("gpt-4o-mini", "gpt-5"))
+async def test_chat_refusal_is_visible(httpx2_mock, async_, stream, model_id):
+    refusal = _mock_chat_refusal(httpx2_mock, stream, content="")
+    model = (llm.get_async_model if async_ else llm.get_model)(model_id)
+    options = {"chat_completions": True} if model_id == "gpt-5" else {}
+    response = model.prompt(
+        "hi", key=API_KEY, stream=stream, schema={"type": "object"}, **options
+    )
+    if async_:
+        events = [event async for event in response.astream_events()]
+        messages = await response.messages()
+    else:
+        events = list(response.stream_events())
+        messages = response.messages()
+    assert "".join(event.chunk for event in events) == refusal
+    if stream:
+        assert [event.chunk for event in events] == [
+            "I cannot help ",
+            "with that request.",
+        ]
+    assert messages == [llm.assistant(refusal)]
+    text = await response.text() if async_ else response.text()
+    assert text == refusal
+    if stream:
+        assert response.response_json["refusal"] == refusal
+        assert response.response_json["content"] == ""
+    else:
+        assert response.response_json["choices"][0]["message"]["refusal"] == refusal
+    request_body = json.loads(httpx2_mock.get_requests()[0].content)
+    assert request_body["response_format"]["type"] == "json_schema"
+
+
+@pytest.mark.parametrize("async_", (False, True))
+@pytest.mark.parametrize("stream", (False, True))
+def test_chat_refusal_cli(httpx2_mock, async_, stream):
+    refusal = _mock_chat_refusal(httpx2_mock, stream)
+    args = ["-m", "gpt-4o-mini", "--key", API_KEY, "--no-log", "hi"]
+    if async_:
+        args.append("--async")
+    if not stream:
+        args.append("--no-stream")
+    result = CliRunner().invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0
+    assert result.stdout == refusal + "\n"
 
 
 def _tool_call_stream():
