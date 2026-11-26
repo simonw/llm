@@ -49,7 +49,8 @@ def test_chat_usage(mock_model, logs_db, usage_flag, no_stream):
     assert result.exit_code == 0
     assert "\n> Hi\none world\n> Hi two\none again\n> quit\n" in result.stdout
     assert result.stderr == (
-        "Token usage: 1 input, 1 output\nToken usage: 2 input, 2 output\n"
+        "Token usage: 1 input, 1 output\nModel: mock\n"
+        "Token usage: 2 input, 2 output\nModel: mock\n"
         if usage_flag
         else ""
     )
@@ -67,7 +68,7 @@ def test_chat_usage(mock_model, logs_db, usage_flag, no_stream):
     )
     assert continued.exit_code == 0
     assert continued.stderr == (
-        "Token usage: 1 input, 1 output\n" if usage_flag else ""
+        "Token usage: 1 input, 1 output\nModel: mock\n" if usage_flag else ""
     )
     assert len(logged_rows(logs_db)) == 3
 
@@ -101,7 +102,8 @@ def test_chat_usage_tool_chain(mock_model, logs_db, monkeypatch, no_stream):
     assert result.exit_code == 0
     assert "\nDone\n" in result.stdout
     assert result.stderr == (
-        "Token usage: 1,000 input, 20 output\n" "Token usage: 1,100 input, 30 output\n"
+        "Token usage: 1,000 input, 20 output\nModel: mock\n"
+        "Token usage: 1,100 input, 30 output\nModel: mock\n"
     )
     assert [row["input_tokens"] for row in logged_rows(logs_db)] == [1000, 1100]
 
@@ -132,8 +134,59 @@ def test_chat_usage_optional_counts(mock_model, logs_db, monkeypatch, usage, exp
         catch_exceptions=False,
     )
     assert result.exit_code == 0
-    assert result.stderr == f"Token usage: {expected}\n"
+    assert result.stderr == f"Token usage: {expected}\nModel: mock\n"
     assert len(logged_rows(logs_db)) == 1
+
+
+@pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")
+@pytest.mark.parametrize(
+    "model_args,expected_model",
+    (
+        (["-m", "gpt-4.1-mini"], "gpt-4.1-mini"),
+        (["-m", "4o"], "gpt-4o"),
+        ([], "gpt-6-luna"),
+    ),
+)
+def test_chat_usage_shows_model_id(
+    monkeypatch, httpx2_mock, mock_openai_responses, logs_db, model_args, expected_model
+):
+    # https://github.com/simonw/llm/issues/946
+    monkeypatch.setenv("OPENAI_API_KEY", "X")
+    if expected_model.startswith("gpt-6"):
+        mock_openai_responses(text="hello", model=expected_model)
+    else:
+        httpx2_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            json={
+                "model": expected_model,
+                "usage": {
+                    "prompt_tokens": 7,
+                    "completion_tokens": 1,
+                    "total_tokens": 8,
+                },
+                "choices": [{"message": {"role": "assistant", "content": "hello"}}],
+            },
+            headers={"Content-Type": "application/json"},
+        )
+    result = CliRunner().invoke(
+        llm.cli.cli,
+        ["chat", "-u", "--no-stream"] + model_args,
+        input="Hi\nquit\n",
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert "\n> Hi\nhello\n" in result.stdout
+    assert "Token usage" not in result.stdout
+    assert "Model:" not in result.stdout
+    expected_usage = (
+        "5 input, 3 output"
+        if expected_model.startswith("gpt-6")
+        else "7 input, 1 output"
+    )
+    assert result.stderr == f"Token usage: {expected_usage}\nModel: {expected_model}\n"
+    request = json.loads(httpx2_mock.get_requests()[-1].content)
+    assert request["model"] == expected_model
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")

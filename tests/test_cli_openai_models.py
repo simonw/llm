@@ -740,7 +740,9 @@ def test_gpt4o_mini_sync_and_async(
     assert result.exit_code == 0
     assert result.stdout == "Ho ho ho\n"
     if usage:
-        assert result.stderr == "Token usage: 1,000 input, 2,000 output\n"
+        assert result.stderr == (
+            "Token usage: 1,000 input, 2,000 output\nModel: gpt-4o-mini\n"
+        )
     # Confirm it was correctly logged
     assert log_db.exists()
     db = db_factory(str(log_db))
@@ -793,3 +795,63 @@ def test_chat_completion_without_usage_sync_and_async(
     turn = next(db["turns"].rows)
     assert turn["input_tokens"] is None
     assert turn["output_tokens"] is None
+
+
+@pytest.mark.parametrize(
+    "model_args,setup,expected_model",
+    (
+        (["-m", "gpt-4o-mini"], None, "gpt-4o-mini"),
+        (["-m", "4o"], None, "gpt-4o"),
+        ([], None, "gpt-6-luna"),
+        ([], "default:gpt-4.1", "gpt-4.1"),
+        ([], "env:gpt-5.4-mini", "gpt-5.4-mini"),
+        (["-m", "fast"], "alias:gpt-5.4-nano", "gpt-5.4-nano"),
+    ),
+)
+@pytest.mark.parametrize("async_", (False, True))
+def test_usage_shows_model_id(
+    monkeypatch,
+    httpx2_mock,
+    mock_openai_responses,
+    model_args,
+    setup,
+    expected_model,
+    async_,
+):
+    # https://github.com/simonw/llm/issues/946
+    monkeypatch.setenv("OPENAI_API_KEY", "X")
+    kind, _, value = (setup or "").partition(":")
+    if kind == "default":
+        llm.set_default_model(value)
+    elif kind == "env":
+        monkeypatch.setenv("LLM_MODEL", value)
+    elif kind == "alias":
+        llm.set_alias("fast", value)
+    is_chat = expected_model.startswith(("gpt-4o", "gpt-4.1"))
+    if is_chat:
+        httpx2_mock.add_response(
+            method="POST",
+            url="https://api.openai.com/v1/chat/completions",
+            json={
+                "model": expected_model,
+                "usage": {
+                    "prompt_tokens": 7,
+                    "completion_tokens": 2,
+                    "total_tokens": 9,
+                },
+                "choices": [{"message": {"role": "assistant", "content": "Ho ho"}}],
+            },
+            headers={"Content-Type": "application/json"},
+        )
+    else:
+        mock_openai_responses(text="Ho ho", model=expected_model)
+    args = model_args + ["--usage", "--no-stream", "Say ho"]
+    if async_:
+        args.append("--async")
+    result = CliRunner().invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0
+    assert result.stdout == "Ho ho\n"
+    usage = "7 input, 2 output" if is_chat else "5 input, 3 output"
+    assert result.stderr == f"Token usage: {usage}\nModel: {expected_model}\n"
+    request = json.loads(httpx2_mock.get_requests()[-1].content)
+    assert request["model"] == expected_model
