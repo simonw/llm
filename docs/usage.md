@@ -536,7 +536,7 @@ Use `-u` or `--usage` to display token usage on standard error after each chat t
 llm chat -u
 ```
 
-This uses the same format as `llm -u`, for example `Token usage: 10 input, 20 output`. If a turn makes multiple model calls using tools, usage is shown separately for each response.
+This uses the same format as `llm -u`, for example `Token usage: 10 input, 20 output` followed by `Model: gpt-4o-mini`. If a turn makes multiple model calls using tools, usage is shown separately for each response.
 
 Sometimes you may want to paste multiple lines of text into a chat at once - for example when debugging an error message.
 

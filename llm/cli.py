@@ -138,14 +138,12 @@ def _display_token_usage(response):
         response._responses if isinstance(response, _BaseChainResponse) else [response]
     )
     for response_object in responses:
-        click.echo(
-            click.style(
-                f"Token usage: {response_object.token_usage()}",
-                fg="yellow",
-                bold=True,
-            ),
-            err=True,
-        )
+        model_line = f"Model: {response_object.model.model_id}"
+        resolved_model = response_object.resolved_model
+        if resolved_model and resolved_model != response_object.model.model_id:
+            model_line += f" (resolved: {resolved_model})"
+        for line in (f"Token usage: {response_object.token_usage()}", model_line):
+            click.echo(click.style(line, fg="yellow", bold=True), err=True)
 
 
 def _run_chat(

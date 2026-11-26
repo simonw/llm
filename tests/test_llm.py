@@ -724,6 +724,23 @@ def test_schema(mock_model, use_pydantic):
     assert response.prompt.schema == dog_schema
 
 
+@pytest.mark.parametrize("async_", (False, True))
+def test_prompt_usage_shows_resolved_model(mock_model, async_mock_model, async_):
+    model = async_mock_model if async_ else mock_model
+    model.resolved_model_name = "mock-2026-01-01"
+    model.enqueue(["hi"])
+    result = CliRunner().invoke(
+        cli,
+        ["-m", "mock", "-u", "hello"] + (["--async"] if async_ else []),
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert result.stdout == "hi\n"
+    assert result.stderr == (
+        "Token usage: 1 input, 1 output\nModel: mock (resolved: mock-2026-01-01)\n"
+    )
+
+
 def test_model_environment_variable(monkeypatch):
     monkeypatch.setenv("LLM_MODEL", "echo")
     runner = CliRunner()

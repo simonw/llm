@@ -49,7 +49,8 @@ def test_chat_usage(mock_model, logs_db, usage_flag, no_stream):
     assert result.exit_code == 0
     assert "\n> Hi\none world\n> Hi two\none again\n> quit\n" in result.stdout
     assert result.stderr == (
-        "Token usage: 1 input, 1 output\nToken usage: 2 input, 2 output\n"
+        "Token usage: 1 input, 1 output\nModel: mock\n"
+        "Token usage: 2 input, 2 output\nModel: mock\n"
         if usage_flag
         else ""
     )
@@ -67,7 +68,7 @@ def test_chat_usage(mock_model, logs_db, usage_flag, no_stream):
     )
     assert continued.exit_code == 0
     assert continued.stderr == (
-        "Token usage: 1 input, 1 output\n" if usage_flag else ""
+        "Token usage: 1 input, 1 output\nModel: mock\n" if usage_flag else ""
     )
     assert len(logged_rows(logs_db)) == 3
 
@@ -101,7 +102,8 @@ def test_chat_usage_tool_chain(mock_model, logs_db, monkeypatch, no_stream):
     assert result.exit_code == 0
     assert "\nDone\n" in result.stdout
     assert result.stderr == (
-        "Token usage: 1,000 input, 20 output\n" "Token usage: 1,100 input, 30 output\n"
+        "Token usage: 1,000 input, 20 output\nModel: mock\n"
+        "Token usage: 1,100 input, 30 output\nModel: mock\n"
     )
     assert [row["input_tokens"] for row in logged_rows(logs_db)] == [1000, 1100]
 
@@ -132,7 +134,7 @@ def test_chat_usage_optional_counts(mock_model, logs_db, monkeypatch, usage, exp
         catch_exceptions=False,
     )
     assert result.exit_code == 0
-    assert result.stderr == f"Token usage: {expected}\n"
+    assert result.stderr == f"Token usage: {expected}\nModel: mock\n"
     assert len(logged_rows(logs_db)) == 1
 
 

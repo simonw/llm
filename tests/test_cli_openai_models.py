@@ -692,10 +692,11 @@ def test_openai_image_detail_original_is_rejected_for_other_models():
     assert "Input should be 'low', 'high' or 'auto'" in result.output
 
 
+@pytest.mark.parametrize("model", ("gpt-4o-mini", "4o-mini"))
 @pytest.mark.parametrize("async_", (False, True))
 @pytest.mark.parametrize("usage", (None, "-u", "--usage"))
 def test_gpt4o_mini_sync_and_async(
-    db_factory, monkeypatch, tmpdir, httpx2_mock, async_, usage
+    db_factory, monkeypatch, tmpdir, httpx2_mock, async_, usage, model
 ):
     user_path = tmpdir / "user_dir"
     log_db = user_path / "logs.db"
@@ -731,7 +732,7 @@ def test_gpt4o_mini_sync_and_async(
         headers={"Content-Type": "application/json"},
     )
     runner = CliRunner()
-    args = ["-m", "gpt-4o-mini", "--key", "x", "--no-stream"]
+    args = ["-m", model, "--key", "x", "--no-stream"]
     if usage:
         args.append(usage)
     if async_:
@@ -740,7 +741,9 @@ def test_gpt4o_mini_sync_and_async(
     assert result.exit_code == 0
     assert result.stdout == "Ho ho ho\n"
     if usage:
-        assert result.stderr == "Token usage: 1,000 input, 2,000 output\n"
+        assert result.stderr == (
+            "Token usage: 1,000 input, 2,000 output\nModel: gpt-4o-mini\n"
+        )
     # Confirm it was correctly logged
     assert log_db.exists()
     db = db_factory(str(log_db))
@@ -793,3 +796,15 @@ def test_chat_completion_without_usage_sync_and_async(
     turn = next(db["turns"].rows)
     assert turn["input_tokens"] is None
     assert turn["output_tokens"] is None
+
+
+@pytest.mark.parametrize("async_", (False, True))
+def test_usage_default_model(mocked_openai_responses, async_):
+    runner = CliRunner()
+    args = ["--key", "x", "--no-stream", "--usage", "hello"]
+    if async_:
+        args.append("--async")
+    result = runner.invoke(cli, args, catch_exceptions=False)
+    assert result.exit_code == 0
+    assert result.stdout == "Bob, Alice, Eve\n"
+    assert result.stderr == "Token usage: 5 input, 3 output\nModel: gpt-6-luna\n"
