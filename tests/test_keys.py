@@ -5,6 +5,7 @@ import sys
 import pytest
 from click.testing import CliRunner
 
+import llm
 from llm.cli import cli
 
 
@@ -40,6 +41,98 @@ def test_keys_set(monkeypatch, tmpdir):
         "// Note": "This file stores secret API credentials. Do not share!",
         "openai": "foo",
     }
+
+
+@pytest.mark.parametrize(
+    "value", ("sk-bad\u221akey", "sk-zero\u200bwidth", "caf\u00e9")
+)
+def test_keys_set_rejects_non_ascii(monkeypatch, tmpdir, value):
+    # https://github.com/simonw/llm/issues/576
+    user_path = tmpdir / "user/keys"
+    monkeypatch.setenv("LLM_USER_PATH", str(user_path))
+    keys_path = user_path / "keys.json"
+    runner = CliRunner()
+    result = runner.invoke(cli, ["keys", "set", "openai", "--value", value])
+    assert result.exit_code == 1
+    assert "API keys must contain only ASCII characters" in result.output
+    assert "U+" in result.output
+    # Nothing should have been written
+    assert not keys_path.exists()
+
+
+NON_ASCII_KEY = "sk-bad\u221akey"
+
+
+@pytest.fixture
+def keys_dir(monkeypatch, tmpdir):
+    path = tmpdir / "user-dir"
+    pathlib.Path(path).mkdir()
+    monkeypatch.setenv("LLM_USER_PATH", str(path))
+    monkeypatch.delenv("LLM_TEST_KEY", raising=False)
+    return path
+
+
+def test_get_key_rejects_non_ascii_stored_key(keys_dir):
+    # A key saved before keys set started rejecting these still needs a clear error
+    (keys_dir / "keys.json").write_text(json.dumps({"openai": NON_ASCII_KEY}), "utf-8")
+    with pytest.raises(ValueError) as exc_info:
+        llm.get_key(alias="openai")
+    message = str(exc_info.value)
+    assert "API keys must contain only ASCII characters" in message
+    assert "U+221A" in message
+    assert "stored key 'openai'" in message
+    # Same via an alias given as the explicit key, and via the key itself
+    with pytest.raises(ValueError) as alias_exc_info:
+        llm.get_key(input="openai")
+    assert "U+221A" in str(alias_exc_info.value)
+    # The key itself is never included in the message
+    assert NON_ASCII_KEY not in message
+    assert "sk-bad" not in message
+
+
+def test_get_key_rejects_non_ascii_explicit_key(keys_dir):
+    with pytest.raises(ValueError) as exc_info:
+        llm.get_key(input="sk-zero\u200bwidth")
+    assert "U+200B" in str(exc_info.value)
+    assert "sk-zero" not in str(exc_info.value)
+
+
+def test_get_key_rejects_non_ascii_env_key(keys_dir, monkeypatch):
+    monkeypatch.setenv("LLM_TEST_KEY", "caf\u00e9")
+    with pytest.raises(ValueError) as exc_info:
+        llm.get_key(alias="missing", env="LLM_TEST_KEY")
+    message = str(exc_info.value)
+    assert "U+00E9" in message
+    assert "environment variable LLM_TEST_KEY" in message
+
+
+def test_get_key_accepts_ascii_and_missing_keys(keys_dir, monkeypatch):
+    (keys_dir / "keys.json").write_text(json.dumps({"openai": "sk-ok"}), "utf-8")
+    monkeypatch.setenv("LLM_TEST_KEY", "from-env")
+    assert llm.get_key(alias="openai") == "sk-ok"
+    assert llm.get_key(input="openai") == "sk-ok"
+    assert llm.get_key(input="custom-key") == "custom-key"
+    assert llm.get_key(alias="missing", env="LLM_TEST_KEY") == "from-env"
+    assert llm.get_key(alias="missing") is None
+
+
+@pytest.mark.parametrize("source", ("stored", "env", "key"))
+def test_prompt_with_non_ascii_key_shows_clear_error(keys_dir, monkeypatch, source):
+    args = ["hello", "--no-stream", "-m", "gpt-4o-mini"]
+    if source == "stored":
+        (keys_dir / "keys.json").write_text(
+            json.dumps({"openai": NON_ASCII_KEY}), "utf-8"
+        )
+    elif source == "env":
+        monkeypatch.setenv("OPENAI_API_KEY", NON_ASCII_KEY)
+    else:
+        args += ["--key", NON_ASCII_KEY]
+    result = CliRunner().invoke(cli, args)
+    assert result.exit_code == 1
+    assert "API keys must contain only ASCII characters" in result.output
+    assert "U+221A" in result.output
+    assert "ascii' codec" not in result.output
+    assert NON_ASCII_KEY not in result.output
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Expected to fail on Windows")

@@ -42,6 +42,7 @@ from llm import (
     Tool,
     Toolbox,
     UnknownModelError,
+    _check_key_ascii,
     encode,
     get_async_model,
     get_default_embedding_model,
@@ -1608,6 +1609,10 @@ def keys_set(name, value):
         $ llm keys set openai
         Enter key: ...
     """
+    try:
+        _check_key_ascii(value)
+    except ValueError as ex:
+        raise click.ClickException(str(ex))
     default = {"// Note": "This file stores secret API credentials. Do not share!"}
     path = user_dir() / "keys.json"
     path.parent.mkdir(parents=True, exist_ok=True)
