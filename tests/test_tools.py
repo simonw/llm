@@ -1463,6 +1463,34 @@ async def test_async_missing_tool_can_be_cancelled_by_before_call():
     ]
 
 
+@pytest.mark.parametrize("async_", [False, True])
+@pytest.mark.parametrize("contents", [{}, {"enabled": True}])
+def test_callable_tool_implementation_is_not_missing(async_, contents):
+    calls = []
+
+    class CallableDict(dict):
+        def __call__(self, value):
+            calls.append(value)
+            return value * 2
+
+    tool = llm.Tool(name="double", implementation=CallableDict(contents))
+    prompt = json.dumps({"tool_calls": [{"name": "double", "arguments": {"value": 2}}]})
+
+    if async_:
+
+        async def run():
+            response = llm.get_async_model("echo").prompt(prompt, tools=[tool])
+            return await response.execute_tool_calls()
+
+        results = asyncio.run(run())
+    else:
+        response = llm.get_model("echo").prompt(prompt, tools=[tool])
+        results = response.execute_tool_calls()
+
+    assert calls == [2]
+    assert [(r.name, r.output, r.exception) for r in results] == [("double", "4", None)]
+
+
 def test_tool_without_implementation_error_matches_sync_and_async():
     tool = llm.Tool(
         name="no_impl",
