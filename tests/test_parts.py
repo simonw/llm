@@ -1713,6 +1713,16 @@ class TestResponseReply:
             llm.user("q3"),
         ]
 
+    def test_reply_reuses_response_key_unless_overridden(self, mock_key_model):
+        r1 = mock_key_model.prompt("q1", key="first")
+        assert r1.text() == "key: first"
+
+        r2 = r1.reply("q2")
+        assert r2.text() == "key: first"
+
+        r3 = r1.reply("q3", key="second")
+        assert r3.text() == "key: second"
+
     def test_reply_no_prompt_reuses_messages_kwarg(self, mock_model):
         """Passing messages= to reply() appends those onto the chain
         in place of a new user string."""
@@ -1833,6 +1843,19 @@ class TestResponseReply:
             llm.assistant("a1"),
             llm.user("q2"),
         ]
+
+    @pytest.mark.asyncio
+    async def test_async_reply_reuses_response_key_unless_overridden(
+        self, mock_async_key_model
+    ):
+        r1 = mock_async_key_model.prompt("q1", key="first")
+        assert await r1.text() == "async, key: first"
+
+        r2 = await r1.reply("q2")
+        assert await r2.text() == "async, key: first"
+
+        r3 = await r1.reply("q3", key="second")
+        assert await r3.text() == "async, key: second"
 
     def test_reply_with_tool_results_appends_tool_message(self, mock_model):
         # model.prompt(...) makes tool calls, the
