@@ -248,36 +248,51 @@ class Collection:
             items_and_hashes = [(item, self.content_hash(item[1])) for item in batch]
             # Skip only IDs whose own content is unchanged.
             existing_items = {
-                (row["id"], row["content_hash"])
+                (row["id"], row["content_hash"]): row["embedding"]
                 for row in self.db.query(
                     """
-                    select id, content_hash from embeddings
+                    select id, content_hash, embedding from embeddings
                     where collection_id = ? and content_hash in ({})
                     """.format(",".join("?" for _ in items_and_hashes)),
                     [collection_id]
                     + [item_and_hash[1] for item_and_hash in items_and_hashes],
                 )
             }
-            filtered_batch = [
-                item
+            changed_ids = {
+                item[0]
                 for item, content_hash in items_and_hashes
                 if (item[0], content_hash) not in existing_items
+            }
+            # Only the last write survives for each ID. If it restores existing
+            # content, reuse that vector while still storing its final metadata.
+            final_items = {item[0]: (item, h) for item, h in items_and_hashes}
+            filtered_batch = [
+                (item, h) for item, h in final_items.values() if item[0] in changed_ids
             ]
-            embeddings = list(
-                self.model().embed_multi((item[1] for item in filtered_batch), key=key)
+            to_embed = [
+                item for item, h in filtered_batch if (item[0], h) not in existing_items
+            ]
+            embeddings = (
+                list(self.model().embed_multi((item[1] for item in to_embed), key=key))
+                if to_embed
+                else []
             )
-            if len(embeddings) != len(filtered_batch):
+            if len(embeddings) != len(to_embed):
                 raise ValueError(
-                    f"Expected {len(filtered_batch)} embeddings, "
-                    f"got {len(embeddings)}"
+                    f"Expected {len(to_embed)} embeddings, got {len(embeddings)}"
                 )
+            new_embeddings = iter(embeddings)
             with self.db.atomic():
                 cast(Table, self.db["embeddings"]).insert_all(
                     (
                         {
                             "collection_id": collection_id,
                             "id": id,
-                            "embedding": llm.encode(embedding),
+                            "embedding": (
+                                existing_items[(id, content_hash)]
+                                if (id, content_hash) in existing_items
+                                else llm.encode(next(new_embeddings))
+                            ),
                             "content": (
                                 value if (store and isinstance(value, str)) else None
                             ),
@@ -299,9 +314,7 @@ class Collection:
                             "metadata": json.dumps(metadata) if metadata else None,
                             "updated": int(time.time()),
                         }
-                        for (embedding, (id, value, metadata)) in zip(
-                            embeddings, filtered_batch
-                        )
+                        for (id, value, metadata), content_hash in filtered_batch
                     ),
                     replace=True,
                 )

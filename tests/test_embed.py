@@ -350,6 +350,87 @@ def test_embed_multi_updates_swapped_content(
     assert model.embedded_content == [goodbye, hello, hello, goodbye]
 
 
+@pytest.mark.parametrize("batch_size", [1, 10])
+def test_embed_multi_updates_same_id_in_input_order(collection, batch_size):
+    model = collection.model()
+    model.embedded_content.clear()
+    initial_batches = model.batch_count
+    collection.embed_multi(
+        [("1", "updated"), ("1", "hello world")],
+        store=True,
+        batch_size=batch_size,
+    )
+    assert collection.db["embeddings"].get((collection.id, "1"))["content"] == (
+        "hello world"
+    )
+    assert model.embedded_content == (
+        ["updated", "hello world"] if batch_size == 1 else []
+    )
+    assert model.batch_count - initial_batches == (2 if batch_size == 1 else 0)
+
+
+@pytest.mark.parametrize("with_metadata", (False, True))
+@pytest.mark.parametrize("binary", (False, True))
+@pytest.mark.parametrize("batch_size", (1, 100))
+def test_embed_multi_embeds_only_final_value_for_each_id(
+    db_factory, with_metadata, binary, batch_size
+):
+    collection = llm.Collection("test", db_factory(memory=True), model_id="embed-demo")
+    first = b"first value" if binary else "first value"
+    final = b"final value" if binary else "final value"
+    other = b"other value" if binary else "other value"
+    model = collection.model()
+    entries = [("1", first), ("2", other), ("1", final)]
+    if with_metadata:
+        collection.embed_multi_with_metadata(
+            ((id, value, {"position": i}) for i, (id, value) in enumerate(entries)),
+            store=True,
+            batch_size=batch_size,
+        )
+    else:
+        collection.embed_multi(iter(entries), store=True, batch_size=batch_size)
+    rows = {row["id"]: row for row in collection.db["embeddings"].rows}
+    assert len(rows) == 2
+    field = "content_blob" if binary else "content"
+    assert rows["1"][field] == final
+    assert rows["2"][field] == other
+    assert rows["1"]["metadata"] == (
+        json.dumps({"position": 2}) if with_metadata else None
+    )
+    assert model.embedded_content == (
+        [first, other, final] if batch_size == 1 else [final, other]
+    )
+    assert model.batch_count == (3 if batch_size == 1 else 1)
+
+
+@pytest.mark.parametrize("binary", (False, True))
+@pytest.mark.parametrize("initial_store", (False, True))
+@pytest.mark.parametrize("unbounded_model_batch", (False, True))
+def test_embed_multi_reuses_vector_without_losing_final_content_or_metadata(
+    db_factory, binary, initial_store, unbounded_model_batch, monkeypatch
+):
+    collection = llm.Collection("test", db_factory(memory=True), model_id="embed-demo")
+    original = b"original value" if binary else "original value"
+    changed = b"changed value" if binary else "changed value"
+    collection.embed("1", original, metadata={"version": 0}, store=initial_store)
+    before = collection.db["embeddings"].get((collection.id, "1"))
+    model = collection.model()
+    if unbounded_model_batch:
+        monkeypatch.setattr(model, "batch_size", None)
+    model.embedded_content.clear()
+    initial_batches = model.batch_count
+    collection.embed_multi_with_metadata(
+        [("1", changed, {"version": 1}), ("1", original, {"version": 2})],
+        store=True,
+    )
+    after = collection.db["embeddings"].get((collection.id, "1"))
+    assert after["embedding"] == before["embedding"]
+    assert after["content_blob" if binary else "content"] == original
+    assert json.loads(after["metadata"]) == {"version": 2}
+    assert model.embedded_content == []
+    assert model.batch_count == initial_batches
+
+
 def test_collection_typed_attachments(db_factory):
     model = TypedAttachmentEmbeddingModel()
     collection = llm.Collection("typed", db_factory(memory=True), model=model)
