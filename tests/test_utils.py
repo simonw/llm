@@ -482,6 +482,11 @@ class ValueFlag:
         self.flag = flag
 
 
+class Nullable:
+    def __init__(self, nullable=False):
+        self.nullable = nullable
+
+
 @pytest.mark.parametrize(
     "spec, expected_cls, expected_attrs",
     [
@@ -497,10 +502,13 @@ class ValueFlag:
         ),
         ("ValueFlag(flag=true)", ValueFlag, {"flag": True}),
         ("ValueFlag(value=123, flag=false)", ValueFlag, {"value": 123, "flag": False}),
+        ("Nullable(nullable=true)", Nullable, {"nullable": True}),
     ],
 )
 def test_instantiate_valid(spec, expected_cls, expected_attrs):
-    obj = instantiate_from_spec({"Files": Files, "ValueFlag": ValueFlag}, spec)
+    obj = instantiate_from_spec(
+        {"Files": Files, "ValueFlag": ValueFlag, "Nullable": Nullable}, spec
+    )
     assert isinstance(obj, expected_cls)
     for key, val in expected_attrs.items():
         assert getattr(obj, key) == val
@@ -630,3 +638,47 @@ def test_toolbox_config_capture():
         pass
 
     assert Tool6()._config == {}
+
+
+def test_toolbox_config_capture_inherited():
+    class BaseTools(Toolbox):
+        def __init__(self, root):
+            self.root = root
+
+            def dynamic():
+                return self.root
+
+            self.add_tool(dynamic)
+
+    class LimitedTools(BaseTools):
+        def __init__(self, root, *, limit=10):
+            super().__init__(root)
+            self.limit = limit
+
+    class InheritedTools(LimitedTools):
+        pass
+
+    tools = InheritedTools("example", limit=2)
+    assert next(iter(tools.tools())).implementation() == "example"
+    assert tools._config == {"root": "example", "limit": 2}
+    assert LimitedTools("example")._config == {"root": "example", "limit": 10}
+
+
+@pytest.mark.parametrize("allowed", [True, False])
+@pytest.mark.parametrize("nested", [False, True])
+def test_schema_summary_boolean_properties(allowed, nested):
+    schema = {"type": "object", "properties": {"value": allowed}}
+    expected = "{value}"
+    if nested:
+        schema = {"type": "object", "properties": {"nested": schema}}
+        expected = "{nested: {value}}"
+    assert llm.utils.schema_summary(schema) == expected
+
+
+@pytest.mark.parametrize("allowed", [True, False])
+def test_schema_summary_boolean_array_items(allowed):
+    schema = {
+        "type": "object",
+        "properties": {"values": {"type": "array", "items": allowed}},
+    }
+    assert llm.utils.schema_summary(schema) == "{values: []}"

@@ -337,7 +337,7 @@ LLM models can take options. For large language models these can be things like 
 
 Options are passed using the `-o/--option` command line parameters, for example:
 ```bash
-llm -m gpt4 "ten pet pelican names" -o temperature 1.5
+llm -m 4o "ten pet pelican names" -o temperature 1.5
 ```
 We're going to add two options to our Markov chain model:
 

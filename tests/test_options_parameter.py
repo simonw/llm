@@ -6,6 +6,29 @@ continues to work undocumented for backwards compatibility.
 
 import pytest
 
+import llm
+
+
+@pytest.mark.parametrize("kwargs", ({}, {"options": None}, {"options": {}}))
+def test_direct_prompt_default_options(mocked_openai_responses, kwargs):
+    model = llm.get_model("gpt-5.5")
+    prompt = llm.Prompt("hello", model, **kwargs)
+    response = llm.Response(prompt=prompt, model=model, stream=False, key="test-key")
+
+    assert response.text() == "Bob, Alice, Eve"
+    assert isinstance(prompt.options, model.Options)
+    assert prompt.options == model.Options()
+
+
+def test_direct_prompt_preserves_options(mocked_openai_responses):
+    model = llm.get_model("gpt-5.5")
+    options = model.Options(temperature=0.5)
+    prompt = llm.Prompt("hello", model, options=options)
+    response = llm.Response(prompt=prompt, model=model, stream=False, key="test-key")
+
+    assert response.text() == "Bob, Alice, Eve"
+    assert prompt.options is options
+
 
 def test_prompt_with_options_dict(mock_model):
     mock_model.enqueue(["ok"])

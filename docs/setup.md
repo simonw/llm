@@ -19,6 +19,7 @@ Or using [Homebrew](https://brew.sh/) (see {ref}`warning note <homebrew-warning>
 brew install llm
 ```
 
+(upgrading-to-the-latest-version)=
 ## Upgrading to the latest version
 
 If you installed using `pip`:
@@ -36,6 +37,15 @@ uv tool upgrade llm
 For Homebrew:
 ```bash
 brew upgrade llm
+```
+```{warning}
+Upgrading with `uv tool upgrade llm`, `pipx upgrade llm` or `brew upgrade llm` replaces the virtual environment that LLM runs in. Any plugins you installed using `llm install` will be lost, and you will need to install them again after the upgrade.
+
+To upgrade LLM while keeping your installed plugins, use `llm install` to upgrade LLM inside that same environment:
+```bash
+llm install -U llm
+```
+You can run `llm plugins` before and after the upgrade to check which plugins are installed.
 ```
 If the latest version is not yet available on Homebrew you can upgrade like this instead:
 ```bash
@@ -167,7 +177,7 @@ You can configure LLM in a number of different ways.
 (setup-default-model)=
 ### Setting a custom default model
 
-The model used when calling `llm` without the `-m/--model` option defaults to `gpt-5.6-luna` - a fast and less expensive OpenAI model.
+The model used when calling `llm` without the `-m/--model` option defaults to `gpt-6-luna` - OpenAI's cheapest frontier model.
 
 You can use the `llm models default` command to set a different default model. For GPT-4o (slower and more expensive, but more capable) run this:
 

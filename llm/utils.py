@@ -37,7 +37,8 @@ def mimetype_from_string(content) -> str | None:
     try:
         type_ = puremagic.from_string(content, mime=True)
         return MIME_TYPE_FIXES.get(type_, type_)
-    except puremagic.PureError:
+    # puremagic raises a ValueError subclass for empty input
+    except (puremagic.PureError, ValueError):
         return None
 
 
@@ -45,7 +46,7 @@ def mimetype_from_path(path) -> str | None:
     try:
         type_ = puremagic.from_file(path, mime=True)
         return MIME_TYPE_FIXES.get(type_, type_)
-    except puremagic.PureError:
+    except (puremagic.PureError, ValueError):
         return None
 
 
@@ -99,6 +100,11 @@ class _LogResponse(httpx2.Response):
             click.echo(chunk.decode(), err=True)
             yield chunk
 
+    async def aiter_bytes(self, *args, **kwargs):
+        async for chunk in super().aiter_bytes(*args, **kwargs):
+            click.echo(chunk.decode(), err=True)
+            yield chunk
+
 
 class _LogTransport(httpx2.BaseTransport):
     def __init__(self, transport: httpx2.BaseTransport):
@@ -112,6 +118,23 @@ class _LogTransport(httpx2.BaseTransport):
             stream=response.stream,
             extensions=response.extensions,
         )
+
+
+class _AsyncLogTransport(httpx2.AsyncBaseTransport):
+    def __init__(self, transport: httpx2.AsyncBaseTransport):
+        self.transport = transport
+
+    async def handle_async_request(self, request: httpx2.Request) -> httpx2.Response:
+        response = await self.transport.handle_async_request(request)
+        return _LogResponse(
+            status_code=response.status_code,
+            headers=response.headers,
+            stream=response.stream,
+            extensions=response.extensions,
+        )
+
+    async def aclose(self):
+        await self.transport.aclose()
 
 
 def _no_accept_encoding(request: httpx2.Request):
@@ -145,7 +168,23 @@ def _log_response(response: httpx2.Response):
     click.echo("  Body:", err=True)
 
 
-def logging_client() -> httpx2.Client:
+async def _async_no_accept_encoding(request: httpx2.Request):
+    _no_accept_encoding(request)
+
+
+async def _async_log_response(response: httpx2.Response):
+    _log_response(response)
+
+
+def logging_client(*, async_=False) -> httpx2.Client | httpx2.AsyncClient:
+    if async_:
+        return httpx2.AsyncClient(
+            transport=_AsyncLogTransport(httpx2.AsyncHTTPTransport()),
+            event_hooks={
+                "request": [_async_no_accept_encoding],
+                "response": [_async_log_response],
+            },
+        )
     return httpx2.Client(
         transport=_LogTransport(httpx2.HTTPTransport()),
         event_hooks={"request": [_no_accept_encoding], "response": [_log_response]},
@@ -332,6 +371,9 @@ def schema_summary(schema: dict) -> str:
         prop_summaries = []
 
         for name, prop_schema in props.items():
+            if isinstance(prop_schema, bool):
+                prop_summaries.append(name)
+                continue
             prop_type = prop_schema.get("type", "")
 
             if prop_type == "array":
@@ -699,7 +741,7 @@ def instantiate_from_spec(class_map: dict[str, type], spec: str):
         return cls(**kw)
 
     # Starts with quote / number / [ / t f n for single positional JSON value
-    if re.match(r'\s*(["\[\d\-]|true|false|null)', arg_body, re.IGNORECASE):
+    if re.match(r'\s*(["\[\d\-]|(true|false|null)\b)', arg_body, re.IGNORECASE):
         try:
             positional_value = json.loads(arg_body)
         except json.JSONDecodeError as e:

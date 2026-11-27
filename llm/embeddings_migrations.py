@@ -88,3 +88,18 @@ def m005_add_content_blob(db):
     db["embeddings"].transform(
         column_order=("collection_id", "id", "embedding", "content", "content_blob")
     )
+
+
+@embeddings_migrations()
+def m006_add_content_type(db):
+    db["embeddings"].add_column("content_type", str)
+    db["embeddings"].transform(
+        column_order=(
+            "collection_id",
+            "id",
+            "embedding",
+            "content",
+            "content_blob",
+            "content_type",
+        )
+    )

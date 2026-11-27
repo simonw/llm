@@ -7,14 +7,14 @@ import textwrap
 import time
 
 import pytest
-import sqlite_utils
 import yaml
 from click.testing import CliRunner
 from ulid import ULID
 
-from llm import Fragment
+from llm import Fragment, ToolCall, user
 from llm.cli import cli
 from llm.migrations import migrate
+from llm.parts import StreamEvent
 from llm.utils import monotonic_ulid
 
 SINGLE_ID = "5843577700ba729bb14c327b30441885"
@@ -22,9 +22,9 @@ MULTI_ID = "4860edd987df587d042a9eb2b299ce5c"
 
 
 @pytest.fixture
-def log_path(user_path):
+def log_path(db_factory, user_path):
     log_path = str(user_path / "logs.db")
-    db = sqlite_utils.Database(log_path)
+    db = db_factory(log_path)
     migrate(db)
     start = datetime.datetime.now(datetime.timezone.utc)
     db["responses"].insert_all(
@@ -45,9 +45,9 @@ def log_path(user_path):
 
 
 @pytest.fixture
-def schema_log_path(user_path):
+def schema_log_path(db_factory, user_path):
     log_path = str(user_path / "logs_schema.db")
-    db = sqlite_utils.Database(log_path)
+    db = db_factory(log_path)
     migrate(db)
     start = datetime.datetime.now(datetime.timezone.utc)
     db["schemas"].insert({"id": SINGLE_ID, "content": '{"name": "string"}'})
@@ -137,10 +137,10 @@ def test_logs_text(log_path, usage):
     assert output == expected
 
 
-def test_logs_text_with_options(user_path):
+def test_logs_text_with_options(db_factory, user_path):
     """Test that ## Options section appears when options_json is set"""
     log_path = str(user_path / "logs_with_options.db")
-    db = sqlite_utils.Database(log_path)
+    db = db_factory(log_path)
     migrate(db)
     start = datetime.datetime.now(datetime.timezone.utc)
 
@@ -173,9 +173,9 @@ def test_logs_text_with_options(user_path):
     assert "- media_resolution: low" in output
 
 
-def test_logs_token_usage_details_are_markdown_code(user_path):
+def test_logs_token_usage_details_are_markdown_code(db_factory, user_path):
     log_path = str(user_path / "logs_token_details.db")
-    db = sqlite_utils.Database(log_path)
+    db = db_factory(log_path)
     migrate(db)
     db["responses"].insert(
         {
@@ -217,9 +217,9 @@ def test_logs_token_usage_details_are_markdown_code(user_path):
         (5_582_000, "5582000ms (1h 33m 2s)"),
     ),
 )
-def test_logs_duration_in_usage_markdown(user_path, duration_ms, expected):
+def test_logs_duration_in_usage_markdown(db_factory, user_path, duration_ms, expected):
     log_path = str(user_path / "logs_duration.db")
-    db = sqlite_utils.Database(log_path)
+    db = db_factory(log_path)
     migrate(db)
     db["responses"].insert(
         {
@@ -356,9 +356,9 @@ def test_logs_short(log_path, arg, usage):
     assert output == expected
 
 
-def test_logs_short_always_includes_duration_ms(user_path):
+def test_logs_short_always_includes_duration_ms(db_factory, user_path):
     log_path = str(user_path / "logs_short_duration.db")
-    db = sqlite_utils.Database(log_path)
+    db = db_factory(log_path)
     migrate(db)
     db["responses"].insert(
         {
@@ -396,11 +396,11 @@ def test_logs_path(monkeypatch, env, user_path):
 
 @pytest.mark.parametrize("model", ("davinci", "curie"))
 @pytest.mark.parametrize("path_option", (None, "-p", "--path", "-d", "--database"))
-def test_logs_filtered(user_path, model, path_option):
+def test_logs_filtered(db_factory, user_path, model, path_option):
     log_path = str(user_path / "logs.db")
     if path_option:
         log_path = str(user_path / "logs_alternative.db")
-    db = sqlite_utils.Database(log_path)
+    db = db_factory(log_path)
     migrate(db)
     db["responses"].insert_all(
         {
@@ -495,6 +495,50 @@ def test_logs_search_excludes_fragment_content(mock_model, logs_db, tmpdir):
     assert json.loads(not_found.output) == []
 
 
+def test_logs_search_indexes_every_user_message(mock_model, logs_db):
+    # A turn's input can hold several user messages. All of them are
+    # shown as its prompt, so all of them are searchable, in order.
+    migrate(logs_db)
+    mock_model.enqueue(["Hello"])
+    response = mock_model.prompt("second narwhal", messages=[user("original walrus")])
+    response.text()
+    response.log_to_db(logs_db)
+    runner = CliRunner()
+    for query in ("walrus", "narwhal", '"walrus second"'):
+        result = runner.invoke(
+            cli, ["logs", "-q", query, "--json"], catch_exceptions=False
+        )
+        assert result.exit_code == 0
+        rows = json.loads(result.output)
+        assert [row["prompt"] for row in rows] == [
+            "original walrus\n\nsecond narwhal"
+        ], query
+
+
+def test_logs_search_separates_text_parts(mock_model, logs_db):
+    # Each text part is indexed as separate words, even where the
+    # displayed text joins parts directly the way providers send them.
+    migrate(logs_db)
+    mock_model.enqueue(
+        [
+            StreamEvent(type="text", chunk="first alpha"),
+            StreamEvent(type="reasoning", chunk="hmm"),
+            StreamEvent(type="text", chunk="second beta"),
+            StreamEvent(type="text", chunk="third gamma", message_index=1),
+        ]
+    )
+    response = mock_model.prompt(messages=[user("tell me about", "pelicans")])
+    response.text()
+    response.log_to_db(logs_db)
+    runner = CliRunner()
+    for query in ("pelicans", '"about pelicans"', '"alpha second"', '"beta third"'):
+        result = runner.invoke(
+            cli, ["logs", "-q", query, "--json"], catch_exceptions=False
+        )
+        assert result.exit_code == 0
+        assert len(json.loads(result.output)) == 1, query
+
+
 def test_logs_search_merges_legacy_rows(mock_model, logs_db):
     # A legacy-only row and a new turn matching the same query both
     # come back from one search.
@@ -549,9 +593,9 @@ def test_logs_search_bad_query_is_a_clean_error(logs_db):
         ("llama", ["--latest"], ["doc3", "doc1"]),
     ),
 )
-def test_logs_search(user_path, query, extra_args, expected):
+def test_logs_search(db_factory, user_path, query, extra_args, expected):
     log_path = str(user_path / "logs.db")
-    db = sqlite_utils.Database(log_path)
+    db = db_factory(log_path)
     migrate(db)
 
     def _insert(id, text):
@@ -623,8 +667,8 @@ def test_logs_schema(schema_log_path, args, expected):
     assert result.output == expected
 
 
-def test_logs_schema_data_ids(schema_log_path):
-    db = sqlite_utils.Database(schema_log_path)
+def test_logs_schema_data_ids(db_factory, schema_log_path):
+    db = db_factory(schema_log_path)
     ulid = ULID.from_timestamp(time.time() + 100)
     db["responses"].insert(
         {
@@ -729,9 +773,9 @@ def test_schemas_list_json(schema_log_path, is_nl):
 
 
 @pytest.fixture
-def fragments_fixture(user_path):
+def fragments_fixture(db_factory, user_path):
     log_path = str(user_path / "logs_fragments.db")
-    db = sqlite_utils.Database(log_path)
+    db = db_factory(log_path)
     migrate(db)
     start = datetime.datetime.now(datetime.timezone.utc)
     # Replace everything from here on
@@ -1248,6 +1292,37 @@ def test_logs_tool_call_argument_formatting(logs_db):
     ) in normalized_output
 
 
+@pytest.mark.parametrize("arg", ("-s", "--short"))
+@pytest.mark.parametrize(
+    "arguments,expected",
+    (
+        ({}, "{}"),
+        ({"text": "short"}, '{"text": "short"}'),
+        ({"text": "x" * 88}, '{"text": "' + "x" * 88 + '"}'),
+        ({"text": "x" * 89}, '{"text": "' + "x" * 87 + "..."),
+        (
+            {"nested": {"text": "x" * 10_000}},
+            '{"nested": {"text": "' + "x" * 76 + "...",
+        ),
+    ),
+)
+def test_logs_short_tool_call_arguments(logs_db, mock_model, arg, arguments, expected):
+    response = mock_model.prompt("Run demo")
+    response.add_tool_call(ToolCall(name="demo", arguments=arguments))
+    response.text()
+    response.log_to_db(logs_db)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", arg], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert yaml.safe_load(result.output)[0]["tool_calls"] == [f"demo({expected})"]
+
+    # The full arguments remain available in JSON output.
+    result = runner.invoke(cli, ["logs", "--json"], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert json.loads(result.output)[0]["tool_calls"][0]["arguments"] == arguments
+
+
 def test_logs_server_side_tool_results(logs_db, mock_model):
     """Server-executed tool calls carry their results inside the
     response itself, so they render in a Tool results section under
@@ -1319,6 +1394,110 @@ def test_logs_server_side_tool_results(logs_db, mock_model):
     short_result = runner.invoke(cli, ["logs", "--short"], catch_exceptions=False)
     assert short_result.exit_code == 0
     assert "shell: 17711" in short_result.output
+
+
+def test_logs_legacy_tool_result_attachment_bytes(logs_db):
+    """A legacy tool result can record its attachment bytes as a BLOB.
+    Aggregating that row into JSON must not fail, and the byte count
+    should render the same way the store's attachments do."""
+    migrate(logs_db)
+    logs_db["responses"].insert(
+        {
+            "id": "01legacyblobaaaaaaaaaaaaaa",
+            "system": None,
+            "prompt": "describe this image",
+            "response": "it is a pelican",
+            "model": "gpt-4o",
+            "datetime_utc": "2025-01-01T00:00:00",
+        },
+        alter=True,
+    )
+    logs_db["tools"].insert(
+        {
+            "id": 1,
+            "name": "view_image",
+            "description": "View an image",
+            "input_schema": "{}",
+            "plugin": "llm",
+        },
+        pk="id",
+        alter=True,
+    )
+    logs_db["tool_results"].insert(
+        {
+            "id": 1,
+            "response_id": "01legacyblobaaaaaaaaaaaaaa",
+            "tool_id": 1,
+            "name": "view_image",
+            "output": "ok",
+            "tool_call_id": "call_1",
+            "instance_id": None,
+            "exception": None,
+        },
+        pk="id",
+        alter=True,
+    )
+    logs_db["attachments"].insert(
+        {
+            "id": "att1",
+            "type": "image/png",
+            "path": None,
+            "url": None,
+            "content": b"hello",
+        },
+        pk="id",
+        alter=True,
+    )
+    logs_db["attachments"].insert_all(
+        [
+            {
+                "id": "att2",
+                "type": "image/png",
+                "path": None,
+                "url": None,
+                "content": None,
+            },
+            {
+                "id": "att3",
+                "type": "image/png",
+                "path": None,
+                "url": None,
+                "content": b"",
+            },
+        ],
+        pk="id",
+        alter=True,
+    )
+    # The "order" column decides the order attachments are listed in,
+    # not insertion order or attachment id
+    logs_db["tool_results_attachments"].insert_all(
+        [
+            {"tool_result_id": 1, "attachment_id": "att1", "order": 2},
+            {"tool_result_id": 1, "attachment_id": "att2", "order": 0},
+            {"tool_result_id": 1, "attachment_id": "att3", "order": 1},
+        ]
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs"], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert "- **view_image**: `call_1`" in result.output
+    assert "- image/png: <5 bytes>" in result.output
+
+    json_result = runner.invoke(cli, ["logs", "--json"], catch_exceptions=False)
+    assert json_result.exit_code == 0
+    row = json.loads(json_result.output)[0]
+    (tool_result,) = row["tool_results"]
+    no_content, empty_content, stored = tool_result["attachments"]
+    # The bytes are not in the JSON, just a marker and the byte count -
+    # the same shape log_row_extras produces for stored attachments
+    assert stored["content"] is True
+    assert stored["content_length"] == 5
+    # a zero length blob and a null content both report no content
+    assert empty_content["content"] is None
+    assert empty_content["content_length"] is None
+    assert no_content["content"] is None
+    assert no_content["content_length"] is None
 
 
 def test_logs_backup(logs_db, tmp_path, monkeypatch):
@@ -1419,11 +1598,10 @@ def test_log_to_db_persists_empty_reasoning_when_absent(logs_db, mock_model):
     assert not row["reasoning"]
 
 
-def test_logs_markdown_renders_reasoning_heading(user_path):
-    """When a row has reasoning text, `llm logs` renders a `## Reasoning`
-    heading between System and Response."""
+def test_logs_markdown_renders_reasoning_heading(db_factory, user_path):
+    """Reasoning renders in a collapsible block below its heading and before Response."""
     log_path = str(user_path / "logs_with_reasoning.db")
-    db = sqlite_utils.Database(log_path)
+    db = db_factory(log_path)
     migrate(db)
     db["responses"].insert(
         {
@@ -1442,7 +1620,10 @@ def test_logs_markdown_renders_reasoning_heading(user_path):
     assert result.exit_code == 0
     # rstrip() before rendering so trailing newlines from the
     # provider output don't push `## Response` down the page.
-    assert "## Reasoning\n\nI thought hard about it.\n\n## Response" in result.output
+    assert (
+        "## Reasoning\n\n<details><summary>Reasoning trace</summary>\n\n"
+        "I thought hard about it.\n\n</details>\n\n## Response"
+    ) in result.output
 
 
 def test_logs_markdown_omits_reasoning_heading_when_empty(log_path):
@@ -1452,3 +1633,66 @@ def test_logs_markdown_omits_reasoning_heading_when_empty(log_path):
     result = runner.invoke(cli, ["logs", "-p", str(log_path)], catch_exceptions=False)
     assert result.exit_code == 0
     assert "## Reasoning" not in result.output
+    assert "<details>" not in result.output
+
+
+def test_logs_truncate_markdown_with_options_and_schema(db_factory, user_path):
+    """-t removes the *_json keys from rows; the markdown renderer must
+    render without them (it used to crash with KeyError: 'options_json')."""
+    log_path = str(user_path / "logs_truncate.db")
+    db = db_factory(log_path)
+    migrate(db)
+    db["schemas"].insert({"id": SINGLE_ID, "content": '{"name": "string"}'})
+    db["responses"].insert(
+        {
+            "id": str(monotonic_ulid()).lower(),
+            "system": "system",
+            "prompt": "prompt",
+            "response": "response",
+            "model": "davinci",
+            "datetime_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "conversation_id": "abc123",
+            "options_json": '{"temperature": 0.5}',
+            "schema_id": SINGLE_ID,
+        }
+    )
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", "-t", "-p", log_path], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert "## Options" not in result.output
+    assert "## Schema" not in result.output
+    # Without -t the same row still renders both sections
+    result2 = runner.invoke(cli, ["logs", "-p", log_path], catch_exceptions=False)
+    assert result2.exit_code == 0
+    assert "- temperature: 0.5" in result2.output
+    assert "## Schema" in result2.output
+
+
+def test_logs_truncate_markdown_new_store(logs_db, mock_model):
+    """Same for rows from the new tables, whose builder always fills
+    options_json - so -t always removed the key."""
+    mock_model.enqueue(["hello"])
+    response = mock_model.prompt("hi")
+    response.text()
+    response.log_to_db(logs_db)
+    runner = CliRunner()
+    result = runner.invoke(cli, ["logs", "-t"], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert "## Response\n\nhello" in result.output
+
+
+@pytest.mark.parametrize("allowed", [True, False])
+def test_schemas_list_boolean_property(schema_log_path, db_factory, allowed):
+    db = db_factory(schema_log_path)
+    db["schemas"].update(
+        SINGLE_ID,
+        {"content": json.dumps({"type": "object", "properties": {"value": allowed}})},
+    )
+    result = CliRunner().invoke(cli, ["schemas", "list", "-d", schema_log_path])
+    assert result.exit_code == 0, result.exception
+    assert "{value}" in result.output
+    # Summary rendering does not modify the schema's validation semantics.
+    assert (
+        json.loads(db["schemas"].get(SINGLE_ID)["content"])["properties"]["value"]
+        is allowed
+    )

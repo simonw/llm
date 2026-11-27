@@ -9,7 +9,6 @@ from importlib.metadata import version
 from unittest import mock
 
 import pytest
-import sqlite_utils
 from click.testing import CliRunner
 from pydantic import BaseModel
 
@@ -27,7 +26,7 @@ def test_version():
 
 @pytest.mark.parametrize("custom_database_path", (False, True))
 def test_llm_prompt_creates_log_database(
-    mocked_openai_responses, tmpdir, monkeypatch, custom_database_path
+    db_factory, mocked_openai_responses, tmpdir, monkeypatch, custom_database_path
 ):
     user_path = tmpdir / "user"
     custom_db_path = tmpdir / "custom_log.db"
@@ -46,7 +45,7 @@ def test_llm_prompt_creates_log_database(
     else:
         assert (user_path / "logs.db").exists()
         db_path = str(user_path / "logs.db")
-    assert sqlite_utils.Database(db_path)["turns"].count == 1
+    assert db_factory(db_path)["turns"].count == 1
 
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
@@ -63,11 +62,17 @@ def test_llm_prompt_creates_log_database(
     ),
 )
 def test_llm_default_prompt(
-    mocked_openai_responses, use_stdin, user_path, logs_off, logs_args, should_log
+    db_factory,
+    mocked_openai_responses,
+    use_stdin,
+    user_path,
+    logs_off,
+    logs_args,
+    should_log,
 ):
     # Reset the log_path database
     log_path = user_path / "logs.db"
-    log_db = sqlite_utils.Database(str(log_path))
+    log_db = db_factory(str(log_path))
     if "turns" in log_db.table_names():
         with log_db.conn:
             log_db.execute("delete from turns")
@@ -113,7 +118,7 @@ def test_llm_default_prompt(
 
     assert len(rows) == 1
     row = rows[0]
-    assert row["model"] == "gpt-5.6-luna"
+    assert row["model"] == "gpt-6-luna"
     assert isinstance(row["duration_ms"], int)
     assert isinstance(row["datetime_utc"], str)
 
@@ -127,7 +132,7 @@ def test_llm_default_prompt(
     assert (
         log_json[0].items()
         >= {
-            "model": "gpt-5.6-luna",
+            "model": "gpt-6-luna",
             "prompt": "three names \nfor a pet pelican",
             "system": None,
             # prompt_json and response_json are no longer recorded: the
@@ -137,14 +142,16 @@ def test_llm_default_prompt(
             "response": "Bob, Alice, Eve",
             # This doesn't have the \n after three names:
             "conversation_name": "three names for a pet pelican",
-            "conversation_model": "gpt-5.6-luna",
+            "conversation_model": "gpt-6-luna",
         }.items()
     )
 
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
 @pytest.mark.parametrize("async_", (False, True))
-def test_llm_prompt_continue(httpx2_mock, mock_openai_responses, user_path, async_):
+def test_llm_prompt_continue(
+    db_factory, httpx2_mock, mock_openai_responses, user_path, async_
+):
     mock_openai_responses(
         text="Bob, Alice, Eve",
         response_id="resp_first",
@@ -157,7 +164,7 @@ def test_llm_prompt_continue(httpx2_mock, mock_openai_responses, user_path, asyn
     )
 
     log_path = user_path / "logs.db"
-    log_db = sqlite_utils.Database(str(log_path))
+    log_db = db_factory(str(log_path))
     if "turns" in log_db.table_names():
         with log_db.conn:
             log_db.execute("delete from turns")
@@ -237,21 +244,22 @@ def test_extract_fenced_code_crlf(httpx2_mock):
         catch_exceptions=False,
     )
     assert result.exit_code == 0, result.output
-    # Click normalizes terminal output to LF; test_utils.py verifies that
-    # extraction itself preserves the response's CRLF bytes.
-    assert result.output == 'print("ok")\n\n'
+    # Windows stdout translates CRLF to CRCRLF, which Click only partially
+    # normalizes. test_utils.py verifies that extraction preserves CRLF.
+    assert result.output.replace("\r\n", "\n") == 'print("ok")\n\n'
 
 
 def test_openai_chat_stream(mocked_openai_chat_stream, user_path):
     runner = CliRunner()
-    result = runner.invoke(cli, ["-m", "gpt-3.5-turbo", "--key", "x", "Say hi"])
+    result = runner.invoke(cli, ["-m", "gpt-4o-mini", "--key", "x", "Say hi"])
     assert result.exit_code == 0
     assert result.output == "Hi.\n"
 
 
-def test_openai_completion(mocked_openai_completion, user_path):
+@pytest.mark.usefixtures("completion_model")
+def test_openai_completion(db_factory, mocked_openai_completion, user_path):
     log_path = user_path / "logs.db"
-    log_db = sqlite_utils.Database(str(log_path))
+    log_db = db_factory(str(log_path))
     if "turns" in log_db.table_names():
         with log_db.conn:
             log_db.execute("delete from turns")
@@ -260,7 +268,7 @@ def test_openai_completion(mocked_openai_completion, user_path):
         cli,
         [
             "-m",
-            "gpt-3.5-turbo-instruct",
+            "completion-demo",
             "Say this is a test",
             "--no-stream",
             "--key",
@@ -274,16 +282,15 @@ def test_openai_completion(mocked_openai_completion, user_path):
     # Should have requested 256 tokens
     last_request = mocked_openai_completion.get_requests()[-1]
     assert json.loads(last_request.content) == {
-        "model": "gpt-3.5-turbo-instruct",
+        "model": "completion-demo",
         "prompt": "Say this is a test",
         "stream": False,
-        "max_tokens": 256,
     }
 
     # Check it was logged
     rows = list(log_db["turns"].rows)
     assert len(rows) == 1
-    assert rows[0]["model"] == "gpt-3.5-turbo-instruct"
+    assert rows[0]["model"] == "completion-demo"
     log_result = runner.invoke(
         cli, ["logs", "-n", "1", "--json"], catch_exceptions=False
     )
@@ -291,7 +298,7 @@ def test_openai_completion(mocked_openai_completion, user_path):
     assert (
         log_json[0].items()
         >= {
-            "model": "gpt-3.5-turbo-instruct",
+            "model": "completion-demo",
             "prompt": "Say this is a test",
             "system": None,
             "response": "\n\nThis is indeed a test",
@@ -299,6 +306,7 @@ def test_openai_completion(mocked_openai_completion, user_path):
     )
 
 
+@pytest.mark.usefixtures("completion_model")
 def test_openai_completion_continue_includes_history(
     mocked_openai_completion, user_path
 ):
@@ -306,7 +314,7 @@ def test_openai_completion_continue_includes_history(
     # prior exchanges, not just the newest prompt - prompt.messages
     # carries them; conversation.responses does not.
     runner = CliRunner()
-    base = ["-m", "gpt-3.5-turbo-instruct", "--no-stream", "--key", "x"]
+    base = ["-m", "completion-demo", "--no-stream", "--key", "x"]
     result = runner.invoke(cli, base + ["Say this is a test"], catch_exceptions=False)
     assert result.exit_code == 0
     result2 = runner.invoke(cli, base + ["Say it again", "-c"], catch_exceptions=False)
@@ -317,13 +325,14 @@ def test_openai_completion_continue_includes_history(
     )
 
 
+@pytest.mark.usefixtures("completion_model")
 def test_openai_completion_system_prompt_error():
     runner = CliRunner()
     result = runner.invoke(
         cli,
         [
             "-m",
-            "gpt-3.5-turbo-instruct",
+            "completion-demo",
             "Say this is a test",
             "--no-stream",
             "--key",
@@ -338,18 +347,19 @@ def test_openai_completion_system_prompt_error():
     )
 
 
+@pytest.mark.usefixtures("completion_model")
 def test_openai_completion_logprobs_stream(
-    mocked_openai_completion_logprobs_stream, user_path
+    db_factory, mocked_openai_completion_logprobs_stream, user_path
 ):
     log_path = user_path / "logs.db"
-    log_db = sqlite_utils.Database(str(log_path))
+    log_db = db_factory(str(log_path))
     if "turns" in log_db.table_names():
         with log_db.conn:
             log_db.execute("delete from turns")
     runner = CliRunner()
     args = [
         "-m",
-        "gpt-3.5-turbo-instruct",
+        "completion-demo",
         "Say hi",
         "-o",
         "logprobs",
@@ -364,21 +374,22 @@ def test_openai_completion_logprobs_stream(
     # persisted - the message chain is the record of what happened.
     rows = list(log_db["turns"].rows)
     assert len(rows) == 1
-    assert rows[0]["model"] == "gpt-3.5-turbo-instruct"
+    assert rows[0]["model"] == "completion-demo"
 
 
+@pytest.mark.usefixtures("completion_model")
 def test_openai_completion_logprobs_nostream(
-    mocked_openai_completion_logprobs, user_path
+    db_factory, mocked_openai_completion_logprobs, user_path
 ):
     log_path = user_path / "logs.db"
-    log_db = sqlite_utils.Database(str(log_path))
+    log_db = db_factory(str(log_path))
     if "turns" in log_db.table_names():
         with log_db.conn:
             log_db.execute("delete from turns")
     runner = CliRunner()
     args = [
         "-m",
-        "gpt-3.5-turbo-instruct",
+        "completion-demo",
         "Say hi",
         "-o",
         "logprobs",
@@ -395,7 +406,7 @@ def test_openai_completion_logprobs_nostream(
     rows = list(log_db["turns"].rows)
     assert len(rows) == 1
     row = rows[0]
-    assert row["model"] == "gpt-3.5-turbo-instruct"
+    assert row["model"] == "completion-demo"
 
 
 EXTRA_MODELS_YAML = """
@@ -409,9 +420,9 @@ EXTRA_MODELS_YAML = """
 """
 
 
-def test_openai_localai_configuration(mocked_localai, user_path):
+def test_openai_localai_configuration(db_factory, mocked_localai, user_path):
     log_path = user_path / "logs.db"
-    sqlite_utils.Database(str(log_path))
+    db_factory(str(log_path))
     # Write the configuration file
     config_path = user_path / "extra-openai-models.yaml"
     config_path.write_text(EXTRA_MODELS_YAML, "utf-8")
@@ -560,20 +571,20 @@ def test_llm_models_json_includes_server_side_tools():
             "-m",
             "gpt-5.6-luna",
             "-m",
-            "chatgpt",
+            "4o-mini",
         ],
         catch_exceptions=False,
     )
 
     assert result.exit_code == 0
     models = {model["model_id"]: model for model in json.loads(result.output)}
-    assert set(models) == {"gpt-5.6-luna", "gpt-3.5-turbo"}
+    assert set(models) == {"gpt-5.6-luna", "gpt-4o-mini"}
     assert models["gpt-5.6-luna"]["server_side_tools"] == [
         {"name": "WebSearch", "plugin": None},
         {"name": "CodeInterpreter", "plugin": None},
         {"name": "ServerSideTool", "plugin": None},
     ]
-    assert models["gpt-3.5-turbo"]["server_side_tools"] == []
+    assert models["gpt-4o-mini"]["server_side_tools"] == []
     assert models["gpt-5.6-luna"]["supports_schema"] is True
     assert models["gpt-5.6-luna"]["supports_tools"] is True
     assert models["gpt-5.6-luna"]["can_stream"] is True
@@ -640,8 +651,8 @@ def test_model_defaults(tmpdir, monkeypatch):
     monkeypatch.setenv("LLM_USER_PATH", user_dir)
     config_path = pathlib.Path(user_dir) / "default_model.txt"
     assert not config_path.exists()
-    assert llm.get_default_model() == "gpt-5.6-luna"
-    assert llm.get_model().model_id == "gpt-5.6-luna"
+    assert llm.get_default_model() == "gpt-6-luna"
+    assert llm.get_model().model_id == "gpt-6-luna"
     llm.set_default_model("gpt-4o")
     assert config_path.exists()
     assert llm.get_default_model() == "gpt-4o"
@@ -732,7 +743,7 @@ def test_model_environment_variable(monkeypatch):
 
 
 @pytest.mark.parametrize("use_filename", (True, False))
-def test_schema_via_cli(mock_model, tmpdir, monkeypatch, use_filename):
+def test_schema_via_cli(db_factory, mock_model, tmpdir, monkeypatch, use_filename):
     user_path = tmpdir / "user"
     schema_path = tmpdir / "schema.json"
     mock_model.enqueue([json.dumps(dog)])
@@ -752,7 +763,7 @@ def test_schema_via_cli(mock_model, tmpdir, monkeypatch, use_filename):
     assert result.output == '{"name": "Cleo", "age": 10}\n'
     # Should have created user_path and put a logs.db in it
     assert (user_path / "logs.db").exists()
-    rows = list(sqlite_utils.Database(str(user_path / "logs.db"))["schemas"].rows)
+    rows = list(db_factory(str(user_path / "logs.db"))["schemas"].rows)
     assert rows == [
         {"id": "9a8ed2c9b17203f6d8905147234475b5", "content": '{"schema":"one"}'}
     ]
@@ -799,7 +810,7 @@ def test_schema_via_cli(mock_model, tmpdir, monkeypatch, use_filename):
         ),
     ),
 )
-def test_schema_using_dsl(mock_model, tmpdir, monkeypatch, args, expected):
+def test_schema_using_dsl(db_factory, mock_model, tmpdir, monkeypatch, args, expected):
     user_path = tmpdir / "user"
     mock_model.enqueue([json.dumps(dog)])
     monkeypatch.setenv("LLM_USER_PATH", str(user_path))
@@ -811,7 +822,7 @@ def test_schema_using_dsl(mock_model, tmpdir, monkeypatch, args, expected):
     )
     assert result.exit_code == 0
     assert result.output == '{"name": "Cleo", "age": 10}\n'
-    rows = list(sqlite_utils.Database(str(user_path / "logs.db"))["schemas"].rows)
+    rows = list(db_factory(str(user_path / "logs.db"))["schemas"].rows)
     assert json.loads(rows[0]["content"]) == expected
 
 
@@ -905,6 +916,7 @@ def test_schemas_dsl():
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
 @pytest.mark.parametrize("custom_database_path", (False, True))
 def test_llm_prompt_continue_with_database(
+    db_factory,
     tmpdir,
     monkeypatch,
     httpx2_mock,
@@ -950,7 +962,7 @@ def test_llm_prompt_continue_with_database(
     else:
         assert (user_path / "logs.db").exists()
         db_path = str(user_path / "logs.db")
-    assert sqlite_utils.Database(db_path)["turns"].count == 2
+    assert db_factory(db_path)["turns"].count == 2
 
 
 @pytest.mark.parametrize("async_", (False, True))

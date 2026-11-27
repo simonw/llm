@@ -2,10 +2,27 @@ import json
 from unittest.mock import ANY
 
 import pytest
-import sqlite_utils
 
 import llm
 from llm.embeddings import Entry
+
+
+class TypedAttachmentEmbeddingModel(llm.EmbeddingModel):
+    model_id = "typed-attachments"
+    attachment_types = frozenset({"audio/wav", "image/png"})
+
+    def __init__(self):
+        self.embedded_content = []
+
+    def embed_batch(self, items):
+        for item in items:
+            self.embedded_content.append(item)
+            if isinstance(item, str):
+                yield [0.5, 0.5]
+            elif item.resolve_type() == "image/png":
+                yield [1.0, 0.0]
+            else:
+                yield [0.0, 1.0]
 
 
 def test_demo_plugin():
@@ -71,6 +88,49 @@ def test_embed_huge_list(batch_size, expected_batches):
     assert model.batch_count == expected_batches
 
 
+def test_embed_typed_attachments():
+    model = TypedAttachmentEmbeddingModel()
+    attachment = llm.Attachment(type="image/png", content=b"png")
+
+    assert model.embed(attachment) == [1.0, 0.0]
+    assert list(model.embed_multi(["caption", attachment])) == [
+        [0.5, 0.5],
+        [1.0, 0.0],
+    ]
+    assert model.embedded_content == [attachment, "caption", attachment]
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "This model does not support attachments of type 'video/mp4', "
+            "only audio/wav, image/png"
+        ),
+    ):
+        model.embed(llm.Attachment(type="video/mp4", content=b"video"))
+
+    with pytest.raises(ValueError, match="does not support binary data"):
+        model.embed(b"untyped")
+
+
+def test_embed_attachment_legacy_binary_fallback(embed_demo):
+    attachment = llm.Attachment(type="image/png", content=b"hello world")
+
+    embed_demo.embed(attachment)
+    list(embed_demo.embed_multi([attachment]))
+
+    assert embed_demo.embedded_content == [b"hello world", b"hello world"]
+
+    with pytest.raises(ValueError, match="Attachment has no content"):
+        embed_demo.embed(llm.Attachment(type="image/png"))
+
+
+def test_embed_attachment_rejected_without_attachment_or_binary_support():
+    model = llm.get_embedding_model("embed-text-only")
+
+    with pytest.raises(ValueError, match="This model does not support attachments"):
+        model.embed(llm.Attachment(type="image/png", content=b"png"))
+
+
 def test_embed_store(collection):
     collection.embed("3", "hello world again", store=True)
     assert collection.db["embeddings"].count == 3
@@ -78,6 +138,22 @@ def test_embed_store(collection):
         next(collection.db["embeddings"].rows_where("id = ?", ["3"]))["content"]
         == "hello world again"
     )
+
+
+def test_embed_same_content_new_id_is_stored(collection):
+    # collection fixture already holds (1, "hello world")
+    # The dedup skip must only apply to the same id, not to any
+    # row in the collection with the same content hash - see #1789
+    collection.embed("3", "hello world")
+    assert collection.db["embeddings"].count == 3
+    assert next(collection.db["embeddings"].rows_where("id = ?", ["3"]))["id"] == "3"
+
+
+def test_embed_same_id_same_content_is_noop(collection):
+    # Re-embedding the same id with unchanged content still skips
+    # the model call and leaves the row count untouched
+    collection.embed("1", "hello world")
+    assert collection.db["embeddings"].count == 2
 
 
 def test_embed_metadata(collection):
@@ -92,18 +168,48 @@ def test_embed_metadata(collection):
     assert entry.content == "hello yet again"
 
 
-def test_collection_embed_key(embed_key_demo):
+def test_collection_embed_key(embed_key_demo, request):
     collection = llm.Collection("test", model=embed_key_demo)
+    request.addfinalizer(collection.db.close)
     collection.embed("1", "hello world", key="sekrit")
     assert embed_key_demo.keys == ["sekrit"]
     assert embed_key_demo.key is None
 
 
-def test_collection_embed_multi_key(embed_key_demo):
+def test_collection_embed_multi_key(embed_key_demo, request):
     collection = llm.Collection("test", model=embed_key_demo)
+    request.addfinalizer(collection.db.close)
     collection.embed_multi([("1", "hello world"), ("2", "goodbye world")], key="sekrit")
     assert embed_key_demo.keys == ["sekrit"]
     assert embed_key_demo.key is None
+
+
+def test_reopened_collection_uses_persisted_model(db_factory, tmp_path, embed_demo):
+    path = str(tmp_path / "embeddings.db")
+    original = llm.Collection("test", db_factory(path), model=embed_demo)
+    original.embed("1", "hello world")
+
+    reopened = llm.Collection(
+        "test",
+        db_factory(path),
+        model=TypedAttachmentEmbeddingModel(),
+        create=False,
+    )
+    reopened.embed("2", "second value")
+
+    dimensions = {
+        row["id"]: len(llm.decode(row["embedding"]))
+        for row in reopened.db["embeddings"].rows
+    }
+    assert dimensions == {"1": 16, "2": 16}
+    assert reopened.model().model_id == reopened.model_id == "embed-demo"
+    assert reopened.db["collections"].get(reopened.id)["model"] == "embed-demo"
+
+    configured_model = type(embed_demo)()
+    configured = llm.Collection(
+        "test", db_factory(path), model=configured_model, create=False
+    )
+    assert configured.model() is configured_model
 
 
 def test_collection(collection):
@@ -118,6 +224,7 @@ def test_collection(collection):
             "embedding": llm.encode([5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
             "content": None,
             "content_blob": None,
+            "content_type": None,
             "content_hash": collection.content_hash("hello world"),
             "metadata": None,
             "updated": ANY,
@@ -128,6 +235,7 @@ def test_collection(collection):
             "embedding": llm.encode([7, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
             "content": None,
             "content_blob": None,
+            "content_type": None,
             "content_hash": collection.content_hash("goodbye world"),
             "metadata": None,
             "updated": ANY,
@@ -166,8 +274,8 @@ def test_similar_by_id(collection):
     ),
 )
 @pytest.mark.parametrize("with_metadata", (False, True))
-def test_embed_multi(with_metadata, batch_size, expected_batches):
-    db = sqlite_utils.Database(memory=True)
+def test_embed_multi(db_factory, with_metadata, batch_size, expected_batches):
+    db = db_factory(memory=True)
     collection = llm.Collection("test", db, model_id="embed-demo")
     model = collection.model()
     assert getattr(model, "batch_count", 0) == 0
@@ -195,6 +303,130 @@ def test_embed_multi(with_metadata, batch_size, expected_batches):
     assert all(row["content_hash"] is not None for row in rows)
     # Check batch count
     assert collection.model().batch_count == expected_batches
+
+
+@pytest.mark.parametrize("with_metadata", (False, True))
+@pytest.mark.parametrize("binary", (False, True))
+@pytest.mark.parametrize("batch_size", (1, 100))
+def test_embed_multi_updates_swapped_content(
+    db_factory, with_metadata, binary, batch_size
+):
+    collection = llm.Collection("test", db_factory(memory=True), model_id="embed-demo")
+    hello = b"hello world" if binary else "hello world"
+    goodbye = b"goodbye world" if binary else "goodbye world"
+    unchanged = b"unchanged" if binary else "unchanged"
+    collection.embed_multi([("1", hello), ("2", goodbye), ("3", unchanged)], store=True)
+    model = collection.model()
+    model.embedded_content.clear()
+    entries = [("1", goodbye), ("2", hello), ("3", unchanged), ("4", hello)]
+    if with_metadata:
+        collection.embed_multi_with_metadata(
+            [(id, value, {"id": id}) for id, value in entries],
+            store=True,
+            batch_size=batch_size,
+        )
+    else:
+        collection.embed_multi(entries, store=True, batch_size=batch_size)
+
+    results = {entry.id: entry for entry in collection.similar(goodbye)}
+    assert collection.count() == 4
+    assert results["1"].score == pytest.approx(1.0)
+    assert results["2"].score < results["1"].score
+    assert results["4"].score == pytest.approx(results["2"].score)
+    if not binary:
+        assert {id: entry.content for id, entry in results.items()} == {
+            "1": "goodbye world",
+            "2": "hello world",
+            "3": "unchanged",
+            "4": "hello world",
+        }
+    if with_metadata:
+        assert results["1"].metadata == {"id": "1"}
+        assert results["2"].metadata == {"id": "2"}
+        assert results["3"].metadata is None
+        assert results["4"].metadata == {"id": "4"}
+    # The unchanged ID is skipped, while a new ID with existing content is stored.
+    # similar() itself embeds the query once at the end.
+    assert model.embedded_content == [goodbye, hello, hello, goodbye]
+
+
+def test_collection_typed_attachments(db_factory):
+    model = TypedAttachmentEmbeddingModel()
+    collection = llm.Collection("typed", db_factory(memory=True), model=model)
+    image = llm.Attachment(type="image/png", content=b"same bytes")
+    audio = llm.Attachment(type="audio/wav", content=b"same bytes")
+
+    collection.embed_multi(
+        [("image", image), ("audio", audio)], store=True, batch_size=2
+    )
+
+    rows = {row["id"]: row for row in collection.db["embeddings"].rows}
+    assert rows["image"]["content_blob"] == b"same bytes"
+    assert rows["image"]["content_type"] == "image/png"
+    assert rows["audio"]["content_blob"] == b"same bytes"
+    assert rows["audio"]["content_type"] == "audio/wav"
+    assert rows["image"]["content_hash"] != rows["audio"]["content_hash"]
+    assert model.embedded_content == [image, audio]
+
+    entries = {entry.id: entry for entry in collection.similar_by_vector([1.0, 0.0])}
+    assert entries["image"].content is None
+    assert entries["image"].content_type == "image/png"
+    assert entries["audio"].content is None
+    assert entries["audio"].content_type == "audio/wav"
+
+
+def test_collection_attachment_type_stored_without_payload(db_factory):
+    collection = llm.Collection(
+        "typed", db_factory(memory=True), model=TypedAttachmentEmbeddingModel()
+    )
+    collection.embed(
+        "image", llm.Attachment(type="image/png", content=b"png"), store=False
+    )
+
+    row = collection.db["embeddings"].get((collection.id, "image"))
+    assert row["content_blob"] is None
+    assert row["content_type"] == "image/png"
+
+
+def test_collection_materializes_url_attachment_once(db_factory, httpx2_mock):
+    httpx2_mock.add_response(
+        method="HEAD",
+        url="https://example.com/image",
+        headers={"content-type": "image/png"},
+    )
+    httpx2_mock.add_response(
+        url="https://example.com/image",
+        content=b"png",
+    )
+    model = TypedAttachmentEmbeddingModel()
+    collection = llm.Collection("typed", db_factory(memory=True), model=model)
+
+    collection.embed(
+        "image", llm.Attachment(url="https://example.com/image"), store=True
+    )
+
+    assert [
+        (request.method, str(request.url)) for request in httpx2_mock.get_requests()
+    ] == [
+        ("HEAD", "https://example.com/image"),
+        ("GET", "https://example.com/image"),
+    ]
+    embedded = model.embedded_content[0]
+    assert embedded == llm.Attachment(
+        type="image/png",
+        url="https://example.com/image",
+        content=b"png",
+    )
+
+
+def test_attachment_content_hash_includes_type():
+    image = llm.Attachment(type="image/png", content=b"same bytes")
+    audio = llm.Attachment(type="audio/wav", content=b"same bytes")
+
+    assert llm.Collection.content_hash(image) != llm.Collection.content_hash(audio)
+    assert llm.Collection.content_hash(image) != llm.Collection.content_hash(
+        b"same bytes"
+    )
 
 
 def test_collection_delete(collection):
@@ -236,3 +468,53 @@ def test_binary_only_and_text_only_embedding_models():
         list(text_only.embed_multi([b"hello world"]))
 
     list(text_only.embed_multi(["hello world"]))
+
+
+class MismatchedEmbeddingModel(llm.EmbeddingModel):
+    model_id = "mismatched-demo"
+
+    def __init__(self, returned):
+        self.returned = returned
+
+    def embed_batch(self, items, *, key=None):
+        for i in range(self.returned):
+            yield [float(i)]
+
+
+class FlakyEmbeddingModel(llm.EmbeddingModel):
+    model_id = "flaky-demo"
+
+    def __init__(self):
+        self.batches = 0
+
+    def embed_batch(self, items, *, key=None):
+        items = list(items)
+        self.batches += 1
+        count = len(items) if self.batches == 1 else 1
+        for i in range(count):
+            yield [float(i)]
+
+
+@pytest.mark.parametrize("returned", (1, 3))
+def test_embed_multi_with_metadata_rejects_embedding_count_mismatch(
+    db_factory, returned
+):
+    db = db_factory(memory=True)
+    collection = llm.Collection(
+        "test", db, model=MismatchedEmbeddingModel(returned=returned)
+    )
+    entries = [("1", "hello", None), ("2", "world", None)]
+    with pytest.raises(ValueError, match=f"^Expected 2 embeddings, got {returned}$"):
+        collection.embed_multi_with_metadata(entries)
+    # Nothing from the mismatched batch was written
+    assert collection.count() == 0
+
+
+def test_embed_multi_with_metadata_keeps_completed_batches_on_mismatch(db_factory):
+    db = db_factory(memory=True)
+    collection = llm.Collection("test", db, model=FlakyEmbeddingModel())
+    entries = [(str(i), f"hello {i}", None) for i in range(4)]
+    with pytest.raises(ValueError, match="^Expected 2 embeddings, got 1$"):
+        collection.embed_multi_with_metadata(entries, batch_size=2)
+    # First batch committed, mismatched second batch did not
+    assert collection.count() == 2

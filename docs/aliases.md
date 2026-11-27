@@ -19,29 +19,17 @@ result = CliRunner().invoke(cli, ["aliases", "list"])
 cog.out("```\n{}```".format(result.output))
 ]]] -->
 ```
-4o                  : gpt-4o
-4o-mini             : gpt-4o-mini
-4.1                 : gpt-4.1
-4.1-mini            : gpt-4.1-mini
-4.1-nano            : gpt-4.1-nano
-3.5                 : gpt-3.5-turbo
-chatgpt             : gpt-3.5-turbo
-chatgpt-16k         : gpt-3.5-turbo-16k
-3.5-16k             : gpt-3.5-turbo-16k
-4                   : gpt-4
-gpt4                : gpt-4
-gpt-4-turbo-preview : gpt-4-turbo
-4-turbo             : gpt-4-turbo
-4t                  : gpt-4-turbo
-3.5-instruct        : gpt-3.5-turbo-instruct
-chatgpt-instruct    : gpt-3.5-turbo-instruct
-ada                 : text-embedding-ada-002 (embedding)
-ada-002             : text-embedding-ada-002 (embedding)
-3-small             : text-embedding-3-small (embedding)
-3-large             : text-embedding-3-large (embedding)
-3-small-512         : text-embedding-3-small-512 (embedding)
-3-large-256         : text-embedding-3-large-256 (embedding)
-3-large-1024        : text-embedding-3-large-1024 (embedding)
+4o           : gpt-4o
+4o-mini      : gpt-4o-mini
+4.1          : gpt-4.1
+4.1-mini     : gpt-4.1-mini
+ada          : text-embedding-ada-002 (embedding)
+ada-002      : text-embedding-ada-002 (embedding)
+3-small      : text-embedding-3-small (embedding)
+3-large      : text-embedding-3-large (embedding)
+3-small-512  : text-embedding-3-small-512 (embedding)
+3-large-256  : text-embedding-3-large-256 (embedding)
+3-large-1024 : text-embedding-3-large-1024 (embedding)
 ```
 <!-- [[[end]]] -->
 
@@ -53,10 +41,8 @@ llm aliases list --json
 Example output:
 ```json
 {
-    "3.5": "gpt-3.5-turbo",
-    "chatgpt": "gpt-3.5-turbo",
-    "4": "gpt-4",
-    "gpt4": "gpt-4",
+    "4o": "gpt-4o",
+    "4o-mini": "gpt-4o-mini",
     "ada": "ada-002"
 }
 ```
@@ -66,13 +52,13 @@ Example output:
 The `llm aliases set <alias> <model-id>` command can be used to add a new alias:
 
 ```bash
-llm aliases set luna gpt-5.6-luna
+llm aliases set luna gpt-6-luna
 ```
 You can also pass one or more `-q search` options to set an alias on the first model matching those search terms:
 ```bash
-llm aliases set luna -q gpt -q luna
+llm aliases set luna -q gpt-6 -q luna
 ```
-Now you can run the `gpt-5.6-luna` model using the `luna` alias like this:
+Now you can run the `gpt-6-luna` model using the `luna` alias like this:
 ```bash
 llm -m luna 'An epic Greek-style saga about a cheesecake that builds a SQL database from scratch'
 ```

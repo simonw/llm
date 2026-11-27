@@ -2,7 +2,6 @@ import base64
 import json
 
 import pytest
-import sqlite_utils
 from click.testing import CliRunner
 from pytest_httpx2 import IteratorStream
 
@@ -406,7 +405,9 @@ def test_endpoint_schema(httpx2_mock, user_path):
     }
 
 
-def test_endpoint_schema_by_id_from_existing_logs_database(httpx2_mock, user_path):
+def test_endpoint_schema_by_id_from_existing_logs_database(
+    db_factory, httpx2_mock, user_path
+):
     base_url = "https://schema-id.example.test/v1"
     _add_chat_response(httpx2_mock, base_url, '{"name": "Cleo"}')
     schema = {
@@ -414,7 +415,7 @@ def test_endpoint_schema_by_id_from_existing_logs_database(httpx2_mock, user_pat
         "properties": {"name": {"type": "string"}},
         "required": ["name"],
     }
-    db = sqlite_utils.Database(str(user_path / "logs.db"))
+    db = db_factory(str(user_path / "logs.db"))
     migrate(db)
     db["schemas"].insert({"id": "dog-schema", "content": json.dumps(schema)})
     assert (user_path / "logs.db").exists()

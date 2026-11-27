@@ -61,6 +61,21 @@ Or from standard input like this:
 cat image.jpg | llm embed --binary -m clip -i -
 ```
 
+Embedding models can also declare support for typed attachments. The `-a/--attachment` option preserves the detected MIME type and whether the input came from a path or URL:
+
+```bash
+llm embed -m multimodal-embedding-model -a image.jpg
+```
+
+Use `--at/--attachment-type` when the MIME type cannot be detected or needs to be overridden:
+
+```bash
+llm embed -m multimodal-embedding-model \
+  --at recording.data audio/wav
+```
+
+`llm embed` accepts one typed attachment at a time. Attachment options cannot be combined with `-c/--content`, `-i/--input`, or `--binary`. The older `--binary` interface remains available for embedding plugins that accept an untyped byte string.
+
 (embeddings-collections)=
 ### Storing embeddings in SQLite
 
@@ -331,6 +346,18 @@ llm embed-multi photos \
   --files photos/ '*.jpeg' --binary
 ```
 
+For embedding models that support typed attachments, individual paths and URLs can instead be added with repeatable `-a/--attachment` and `--at/--attachment-type` options:
+
+```bash
+llm embed-multi media \
+  -m multimodal-embedding-model \
+  -a photos/pelican.jpg \
+  -a sounds/pelican.wav \
+  --at sounds/unknown.data audio/wav
+```
+
+The ID for a local attachment is its basename, a URL attachment uses the full URL, and a standard-input attachment uses its content hash. `--prefix` can be used to prepend a string to those IDs. Typed attachments cannot be combined with an input file, `--sql`, `--files`, `--format`, `--encoding`, or `--binary` in the same invocation.
+
 (embeddings-cli-similar)=
 ## llm similar
 
@@ -367,6 +394,20 @@ When using a model like CLIP, you can find images similar to an input image usin
 ```bash
 llm similar photos -i image.jpg --binary
 ```
+
+For a model that supports typed attachments, use `-a/--attachment` instead:
+
+```bash
+llm similar media -a recording.wav
+```
+
+Or provide an explicit MIME type:
+
+```bash
+llm similar media --at recording.data audio/wav
+```
+
+`llm similar` accepts one typed attachment, and it cannot be combined with an ID, `-c/--content`, `-i/--input`, or `--binary`.
 
 You can filter results to only show IDs that begin with a specific prefix using --prefix:
 

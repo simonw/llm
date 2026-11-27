@@ -63,6 +63,68 @@ def test_prompt_attachment(mock_model, logs_db, attachment_type, attachment_cont
     assert part_attachment["attachment_id"] == attachment["id"]
 
 
+@pytest.mark.skipif(
+    sys.platform not in ("darwin", "linux"),
+    reason="File descriptor paths only supported on macOS and Linux",
+)
+@pytest.mark.parametrize("attachment_option", ("-a", "--at"))
+def test_prompt_attachment_from_pipe(mock_model, logs_db, attachment_option):
+    read_fd, write_fd = os.pipe()
+    try:
+        os.write(write_fd, TINY_PNG)
+    finally:
+        os.close(write_fd)
+    try:
+        mock_model.enqueue(["two boxes"])
+        attachment_args = [attachment_option, f"/dev/fd/{read_fd}"]
+        if attachment_option == "--at":
+            attachment_args.append("image/png")
+        result = CliRunner().invoke(
+            cli.cli,
+            ["prompt", "-m", "mock", "describe file", *attachment_args],
+            catch_exceptions=False,
+        )
+        assert result.exit_code == 0, result.output
+        assert result.output == "two boxes\n"
+        attachment = mock_model.history[0][0].attachments[0]
+        assert attachment.resolve_type() == "image/png"
+        assert attachment.content_bytes() == TINY_PNG
+        assert attachment.content_bytes() == TINY_PNG
+        stored = next(iter(logs_db["attachments"].rows))
+        assert stored["content"] == TINY_PNG
+        assert stored["path"] is None
+    finally:
+        os.close(read_fd)
+
+
+@pytest.mark.parametrize("source", ("stdin", "file"))
+def test_prompt_attachment_empty(mock_model, tmp_path, source):
+    # An empty attachment is a usage error, not a traceback:
+    # https://github.com/simonw/llm/issues/1853
+    runner = CliRunner()
+    if source == "stdin":
+        attachment, input, name = "-", b"", "stdin"
+    else:
+        path = tmp_path / "empty.bin"
+        path.write_bytes(b"")
+        attachment, input, name = str(path), None, str(path)
+    result = runner.invoke(
+        cli.cli,
+        ["prompt", "-m", "mock", "describe file", "-a", attachment],
+        input=input,
+    )
+    assert result.exit_code == 2, result.output
+    assert f"Could not determine mimetype of {name}" in result.output
+    assert mock_model.history == []
+
+
+def test_mimetype_of_empty_content(tmp_path):
+    empty = tmp_path / "empty.bin"
+    empty.write_bytes(b"")
+    assert llm.utils.mimetype_from_string(b"") is None
+    assert llm.utils.mimetype_from_path(str(empty)) is None
+
+
 def _count_open_fds():
     """Count open file descriptors (macOS and Linux only)."""
     if sys.platform == "darwin":

@@ -10,6 +10,7 @@ import click
 
 from .embeddings import Collection
 from .errors import (
+    ConversationNotSupported,
     ModelError,
     NeedsKeyException,
 )
@@ -59,6 +60,7 @@ __all__ = [
     "CancelToolCall",
     "Collection",
     "Conversation",
+    "ConversationNotSupported",
     "Fragment",
     "KeyModel",
     "Message",
@@ -88,7 +90,7 @@ __all__ = [
     "user",
     "user_dir",
 ]
-DEFAULT_MODEL = "gpt-5.6-luna"
+DEFAULT_MODEL = "gpt-6-luna"
 
 
 def get_plugins(all=False):
@@ -492,8 +494,8 @@ def get_default_model(filename="default_model.txt", default=DEFAULT_MODEL):
 
 def set_default_model(model, filename="default_model.txt"):
     path = user_dir() / filename
-    if model is None and path.exists():
-        path.unlink()
+    if model is None:
+        path.unlink(missing_ok=True)
     else:
         path.write_text(model)
 

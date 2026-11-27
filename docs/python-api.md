@@ -7,12 +7,12 @@ Understanding this API is also important for writing {ref}`plugins`.
 
 ## Basic prompt execution
 
-To run a prompt against the `gpt-5.6-luna` model, run this:
+To run a prompt against the `gpt-6-luna` model, run this:
 
 ```python
 import llm
 
-model = llm.get_model("gpt-5.6-luna")
+model = llm.get_model("gpt-6-luna")
 # key= is optional, you can configure the key in other ways
 response = model.prompt(
     "Five surprising names for a pet pelican",
@@ -26,7 +26,7 @@ If you inspect the response before it has been evaluated it will look like this:
 
     <Response prompt='Your prompt' text='... not yet done ...'>
 
-The `llm.get_model()` function accepts model IDs or aliases. You can also omit it to use the currently configured default model, which is `gpt-5.6-luna` if you have not changed the default.
+The `llm.get_model()` function accepts model IDs or aliases. You can also omit it to use the currently configured default model, which is `gpt-6-luna` if you have not changed the default.
 
 In this example the key is set by Python code. You can also provide the key using the `OPENAI_API_KEY` environment variable, or use the `llm keys set openai` command to store it in a `keys.json` file, see {ref}`api-keys`.
 
@@ -68,7 +68,7 @@ This example shows two attachments - one from a file path and one from a URL:
 ```python
 import llm
 
-model = llm.get_model("gpt-5.6-luna")
+model = llm.get_model("gpt-6-luna")
 response = model.prompt(
     "Describe these images",
     attachments=[
@@ -87,7 +87,7 @@ Use `llm.Attachment(content=b"binary image content here")` to pass binary conten
 You can check which attachment types (if any) a model supports using the `model.attachment_types` set:
 
 ```python
-model = llm.get_model("gpt-5.6-luna")
+model = llm.get_model("gpt-6-luna")
 print(model.attachment_types)
 # {'image/gif', 'image/png', 'image/jpeg', 'image/webp'}
 
@@ -322,7 +322,7 @@ For example, OpenAI Responses models support {ref}`Web Search <openai-models-web
 import llm
 from llm.default_plugins.openai_models import CodeInterpreter
 
-response = llm.get_model("gpt-5.6-luna").prompt(
+response = llm.get_model("gpt-6-luna").prompt(
     "Use the python tool to calculate the first 20 Fibonacci numbers",
     tools=[CodeInterpreter(memory_limit="4g")],
 )
@@ -440,7 +440,7 @@ class Dog(BaseModel):
     name: str
     age: int
 
-model = llm.get_model("gpt-5.6-luna")
+model = llm.get_model("gpt-6-luna")
 response = model.prompt("Describe a nice dog", schema=Dog)
 dog = json.loads(response.text())
 print(dog)
@@ -521,7 +521,7 @@ print(model.prompt("Names for otters", options={"temperature": 0.2}))
 Models that accept API keys should take an additional `key=` parameter to their `model.prompt()` method:
 
 ```python
-model = llm.get_model("gpt-5.6-luna")
+model = llm.get_model("gpt-6-luna")
 print(model.prompt("Names for beavers", key="sk-..."))
 ```
 
@@ -562,16 +562,16 @@ You can access this JSON data as a Python dictionary using the `response.json()`
 import llm
 from pprint import pprint
 
-model = llm.get_model("gpt-5.6-luna")
+model = llm.get_model("gpt-6-luna")
 response = model.prompt("3 names for an otter")
 json_data = response.json()
 pprint(json_data)
 ```
-Here's an abbreviated example of that output from GPT-5.6 Luna:
+Here's an abbreviated example of that output from GPT-6 Luna:
 ```python
 {'created_at': 1785451200.0,
  'id': 'resp_...',
- 'model': 'gpt-5.6-luna',
+ 'model': 'gpt-6-luna',
  'object': 'response',
  'output': [
      # Reasoning and message items are abbreviated here
@@ -663,6 +663,36 @@ print(response.text())
 The `user()`, `assistant()`, and `system()` helpers accept strings (wrapped as `TextPart`) but can also accept `llm.Attachment` instances (wrapped as `AttachmentPart`) or more complex sequences of `Part` objects.
 
 Calling `model.prompt("hi", system="Be brief.")` is equivalent to `model.prompt(messages=[system("Be brief."), user("hi")])`.
+
+(python-api-messages-with-prompt)=
+
+#### Combining messages= with a prompt
+
+`messages=` is the conversation so far. If you also pass a prompt, it is sent as a new user message after those messages:
+
+```python
+history = [
+    user("What is the capital of France?"),
+    assistant("Paris, matey."),
+]
+response = model.prompt("And Germany?", messages=history)
+```
+
+This sends the same three messages as adding `user("And Germany?")` to the end of the list. Any `fragments=` and `attachments=` become part of that final user message, and `tool_results=` are added as a tool message before it.
+
+Pass the new input one way or the other, not both. If `messages=` already ends with the latest user message, passing that message as the prompt as well sends it to the model twice:
+
+```python
+# Don't do this - the model receives "And Germany?" twice
+response = model.prompt(
+    "And Germany?",
+    messages=history + [user("And Germany?")],
+)
+```
+
+`system=` is added as the first message, unless `messages=` already starts with a system message.
+
+This applies to `model.prompt()`, `conversation.prompt()` and `chain()`, and to their asynchronous equivalents. The list you pass in is not modified. `response.prompt.messages` shows exactly what was sent to the model.
 
 #### Streaming events as they arrive
 
@@ -786,7 +816,7 @@ This `await model.prompt()` method takes the same arguments as the synchronous `
 
 {ref}`Tool functions <python-api-tools>` can be both synchronous or asynchronous. The latter are defined using `async def tool_name(...)`. Either kind of function can be passed to the `tools=[...]` parameter.
 
-If an `async def` function is used in a synchronous context LLM will automatically execute it in a thread pool using `asyncio.run()`. This means the following will work even in non-asynchronous Python scripts:
+If an `async def` function is used in a synchronous context LLM will automatically execute it using `asyncio.run()`. This means the following will work even in non-asynchronous Python scripts:
 
 ```python
 async def hello(name: str) -> str:
@@ -800,6 +830,8 @@ chain_response = model.chain(
 print(chain_response.text())
 ```
 This also works for `async def` methods of `llm.Toolbox` subclasses.
+
+If the synchronous model is called from code where an event loop is already running, such as a Jupyter notebook, the `async def` tool runs in a separate thread with its own event loop. The tool should not depend on objects that belong to the calling event loop, such as locks, queues or async HTTP clients created outside the tool. Awaiting something that the calling event loop must complete will hang, because that loop is blocked until the tool returns. Use an {ref}`async model <python-api-async>` to run tools on the current event loop instead.
 
 ### Tool use for async models
 
@@ -845,6 +877,8 @@ The `before_call` and `after_call` hooks can be async functions when used with a
 ## Conversations
 
 LLM supports *conversations*, where you ask follow-up questions of a model as part of an ongoing conversation.
+
+Some models only support single-turn prompts. You can check `model.supports_conversation` to see if a model supports follow-up questions. Models that don't will raise `llm.ConversationNotSupported`, a subclass of `ValueError`, if you attempt a reply or pass `messages=` containing an `assistant` or `tool` message.
 
 To start a new conversation, use the `model.conversation()` method:
 
@@ -941,7 +975,7 @@ Example usage:
 ```python
 import llm
 
-model = llm.get_model("gpt-5.6-luna")
+model = llm.get_model("gpt-6-luna")
 response = model.prompt("a poem about a hippo")
 response.on_done(lambda response: print(response.usage()))
 print(response.text())
@@ -958,7 +992,7 @@ Or using an `asyncio` model, where you need to `await response.on_done(done)` to
 import asyncio, llm
 
 async def run():
-    model = llm.get_async_model("gpt-5.6-luna")
+    model = llm.get_async_model("gpt-6-luna")
     response = model.prompt("a short poem about a brick")
     async def done(response):
         print(await response.usage())
@@ -968,6 +1002,25 @@ async def run():
 
 asyncio.run(run())
 ```
+
+For a tool chain, use `chain.on_response(callback)` to register a callback for each completed model response. This callback runs before checking the chain limit or executing that response's tool calls, so it can save completed rounds even if later work fails:
+
+```python
+import llm
+import sqlite_utils
+from llm.tools import llm_time
+
+db = sqlite_utils.Database("tool-history.db")
+chain = llm.get_model("gpt-5.6-luna").chain(
+    "What time is it?", tools=[llm_time]
+)
+chain.on_response(lambda response: response.log_to_db(db))
+print(chain.text())
+```
+
+`AsyncChainResponse.on_response()` also accepts async callbacks and awaits them before continuing the chain.
+
+Callback exceptions propagate and stop the chain.
 
 ## Other functions
 
@@ -980,7 +1033,7 @@ The `llm.set_alias()` function can be used to define a new alias:
 ```python
 import llm
 
-llm.set_alias("mini", "gpt-5.6-luna")
+llm.set_alias("mini", "gpt-6-luna")
 ```
 The second argument can be a model identifier or another alias, in which case that alias will be resolved.
 
@@ -1010,7 +1063,7 @@ llm.set_default_model("claude-5-sonnet")
 
 ### get_default_model()
 
-This returns the currently configured default model, or `gpt-5.6-luna` if no default has been set.
+This returns the currently configured default model, or `gpt-6-luna` if no default has been set.
 
 ```python
 import llm

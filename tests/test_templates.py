@@ -85,9 +85,36 @@ def test_templates_list(templates_path, args):
 
 
 @pytest.mark.parametrize(
+    "content,location",
+    (
+        ("attachments: [123]", "attachments, 0"),
+        (
+            "attachment_types: [{type: text/plain, value: 123}]",
+            "attachment_types, 0, value",
+        ),
+    ),
+)
+@pytest.mark.parametrize("list_templates", (False, True))
+def test_template_nested_validation_error(
+    templates_path, content, location, list_templates
+):
+    (templates_path / "invalid.yaml").write_text(content, "utf-8")
+    (templates_path / "valid.yaml").write_text("A valid prompt", "utf-8")
+    args = ["templates", "list"] if list_templates else ["-t", "invalid", "hi"]
+    result = CliRunner().invoke(cli, args, catch_exceptions=False)
+    if list_templates:
+        assert result.exit_code == 0
+        assert result.output == "valid : A valid prompt\n"
+    else:
+        assert result.exit_code == 1
+        assert location in result.output
+        assert "Input should be a valid string" in result.output
+
+
+@pytest.mark.parametrize(
     "args,expected,expected_error",
     (
-        (["-m", "gpt4", "hello"], {"model": "gpt-4", "prompt": "hello"}, None),
+        (["-m", "4o", "hello"], {"model": "gpt-4o", "prompt": "hello"}, None),
         (["hello $foo"], {"prompt": "hello $foo"}, None),
         (["--system", "system"], {"system": "system"}, None),
         (["-t", "template"], None, "--save cannot be used with --template"),
@@ -210,10 +237,10 @@ def test_templates_error_on_missing_schema(templates_path):
             None,
         ),
         (
-            "prompt: 'Summarize this: $input'\nmodel: gpt-4",
+            "prompt: 'Summarize this: $input'\nmodel: gpt-4o",
             "Input text",
             [],
-            "gpt-4",
+            "gpt-4o",
             "Summarize this: Input text",
             None,
             None,
@@ -221,8 +248,8 @@ def test_templates_error_on_missing_schema(templates_path):
         (
             "prompt: 'Summarize this: $input'",
             "Input text",
-            ["-m", "4"],
-            "gpt-4",
+            ["-m", "4o"],
+            "gpt-4o",
             "Summarize this: Input text",
             None,
             None,
@@ -352,7 +379,7 @@ def test_execute_prompt_with_multiple_templates_in_order(
     templates_path, mocked_openai_chat
 ):
     (templates_path / "configuration.yaml").write_text(
-        "model: gpt-4\noptions:\n  temperature: 0.5", "utf-8"
+        "model: gpt-4o\noptions:\n  temperature: 0.5", "utf-8"
     )
     (templates_path / "instruction.yaml").write_text(
         "prompt: 'Summarize this: $input'", "utf-8"
@@ -379,7 +406,7 @@ def test_execute_prompt_with_multiple_templates_in_order(
     assert result.exit_code == 0
     request = mocked_openai_chat.get_requests()[-1]
     assert json.loads(request.content) == {
-        "model": "gpt-4",
+        "model": "gpt-4o",
         "messages": [
             {
                 "role": "user",
@@ -606,3 +633,15 @@ def test_tools_in_templates(
     finally:
         after()
         pm.unregister(name="greetings-plugin")
+
+
+def test_templates_edit_invalid_yaml(templates_path, monkeypatch):
+    # An edit that leaves invalid YAML is reported as an error, not a traceback
+    def edit(filename):
+        pathlib.Path(filename).write_text("prompt: [unclosed", "utf-8")
+
+    monkeypatch.setattr("click.edit", edit)
+    runner = CliRunner()
+    result = runner.invoke(cli, ["templates", "edit", "broken"])
+    assert result.exit_code == 1
+    assert result.output.startswith("Error: Invalid YAML: ")

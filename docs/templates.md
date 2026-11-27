@@ -73,7 +73,7 @@ curl -s https://example.com/ | llm -t summarize
 This can be combined with the `-m` option to specify a different model:
 ```bash
 curl -s https://llm.datasette.io/en/latest/ | \
-  llm -t summarize -m gpt-3.5-turbo-16k
+  llm -t summarize -m gpt-4o-mini
 ```
 Templates can also be specified as a direct path to a YAML file on disk:
 ```bash
@@ -342,7 +342,7 @@ extract: true
 
 ### Setting a default model for a template
 
-Templates executed using `llm -t template-name` will execute using the default model that the user has configured for the tool - or `gpt-5.6-luna` if they have not configured their own default.
+Templates executed using `llm -t template-name` will execute using the default model that the user has configured for the tool - or `gpt-6-luna` if they have not configured their own default.
 
 You can specify a new default model for a template using the `model:` key in the associated YAML. Here's a template called `roast`:
 

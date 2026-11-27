@@ -37,14 +37,26 @@ def user_path(tmpdir):
 
 
 @pytest.fixture
-def logs_db(user_path):
-    return sqlite_utils.Database(str(user_path / "logs.db"))
+def db_factory(request):
+    """Create test-owned databases and close them even when a test fails."""
+
+    def create(*args, **kwargs):
+        db = sqlite_utils.Database(*args, **kwargs)
+        request.addfinalizer(db.close)
+        return db
+
+    return create
 
 
 @pytest.fixture
-def user_path_with_embeddings(user_path):
+def logs_db(db_factory, user_path):
+    return db_factory(str(user_path / "logs.db"))
+
+
+@pytest.fixture
+def user_path_with_embeddings(db_factory, user_path):
     path = str(user_path / "embeddings.db")
-    db = sqlite_utils.Database(path)
+    db = db_factory(path)
     collection = llm.Collection("demo", db, model_id="embed-demo")
     collection.embed("1", "hello world", store=True)
     collection.embed("2", "goodbye world", store=True)
@@ -386,6 +398,14 @@ def mocked_openai_chat_stream(httpx2_mock):
 
 
 @pytest.fixture
+def completion_model(user_path):
+    (user_path / "extra-openai-models.yaml").write_text(
+        "- model_id: completion-demo\n  model_name: completion-demo\n  completion: true\n",
+        "utf-8",
+    )
+
+
+@pytest.fixture
 def mocked_openai_completion(httpx2_mock):
     httpx2_mock.add_response(
         method="POST",
@@ -394,7 +414,7 @@ def mocked_openai_completion(httpx2_mock):
             "id": "cmpl-uqkvlQyYK7bGYrRHQ0eXlWi7",
             "object": "text_completion",
             "created": 1589478378,
-            "model": "gpt-3.5-turbo-instruct",
+            "model": "completion-demo",
             "choices": [
                 {
                     "text": "\n\nThis is indeed a test",
@@ -475,7 +495,7 @@ def stream_completion_events():
                     "object": "text_completion",
                     "created": 1695097702,
                     "choices": choices,
-                    "model": "gpt-3.5-turbo-instruct",
+                    "model": "completion-demo",
                 }
             )
         ).encode("utf-8")
@@ -502,7 +522,7 @@ def mocked_openai_completion_logprobs(httpx2_mock):
             "id": "cmpl-80MeBfKJutM0uMNJkRrebJLeP3bxL",
             "object": "text_completion",
             "created": 1695097747,
-            "model": "gpt-3.5-turbo-instruct",
+            "model": "completion-demo",
             "choices": [
                 {
                     "text": "\n\nHi.",
@@ -553,8 +573,9 @@ def mocked_localai(httpx2_mock):
 
 
 @pytest.fixture
-def collection():
+def collection(request):
     collection = llm.Collection("test", model_id="embed-demo")
+    request.addfinalizer(collection.db.close)
     collection.embed(1, "hello world")
     collection.embed(2, "goodbye world")
     return collection
