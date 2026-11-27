@@ -1145,6 +1145,33 @@ async def test_chain_async_limit_allows_final_response():
         await chain.text()
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("async_model", [False, True])
+@pytest.mark.parametrize("async_tool", [False, True])
+async def test_positional_only_tool_arguments(async_model, async_tool):
+    def lookup(prefix: str = "city", place: str = "", /, *, units: str):
+        return f"{prefix}/{place}/{units}"
+
+    async def async_lookup(prefix: str = "city", place: str = "", /, *, units: str):
+        return lookup(prefix, place, units=units)
+
+    function = async_lookup if async_tool else lookup
+    model = llm.get_async_model("echo") if async_model else llm.get_model("echo")
+    payload = {
+        "tool_calls": [
+            {"name": function.__name__, "arguments": {"place": "Paris", "units": "C"}}
+        ]
+    }
+    chain = model.chain(json.dumps(payload), tools=[function])
+    if async_model:
+        await chain.text()
+    else:
+        chain.text()
+    result = chain._responses[1].prompt.tool_results[0]
+    assert result.exception is None
+    assert result.output == "city/Paris/C"
+
+
 def test_tool_function_receives_llm_tool_call():
     captured = {}
 

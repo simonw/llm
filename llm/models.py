@@ -286,15 +286,7 @@ def _get_arguments_input_schema(function, name):
     return create_model(f"{name}InputSchema", **fields)
 
 
-def _accepts_llm_tool_call(implementation) -> bool:
-    try:
-        signature = inspect.signature(implementation)
-    except (TypeError, ValueError):
-        return False
-    return "llm_tool_call" in signature.parameters
-
-
-def _implementation_arguments(tool: "Tool", tool_call: "ToolCall") -> dict:
+def _implementation_arguments(tool: "Tool", tool_call: "ToolCall") -> tuple[list, dict]:
     """Arguments to invoke a tool implementation with.
 
     Implementations with an explicit ``llm_tool_call`` parameter receive
@@ -313,9 +305,25 @@ def _implementation_arguments(tool: "Tool", tool_call: "ToolCall") -> dict:
         raise ValueError(
             "Tool call arguments were not valid JSON: " + arguments["_raw"]
         )
-    if _accepts_llm_tool_call(tool.implementation):
+    if tool.implementation is None:
+        return [], arguments
+    try:
+        parameters = inspect.signature(tool.implementation).parameters
+    except (TypeError, ValueError):
+        return [], arguments
+    if "llm_tool_call" in parameters:
         arguments["llm_tool_call"] = tool_call
-    return arguments
+    positional = []
+    for param in parameters.values():
+        if param.kind != inspect.Parameter.POSITIONAL_ONLY:
+            break
+        if param.name in arguments:
+            positional.append(arguments.pop(param.name))
+        elif param.default is not inspect.Parameter.empty:
+            positional.append(param.default)
+        else:
+            break
+    return positional, arguments
 
 
 class Toolbox:
@@ -2021,9 +2029,9 @@ class Response(_BaseResponse):
             exception = None
 
             try:
-                implementation_arguments = _implementation_arguments(tool, tool_call)
+                args, kwargs = _implementation_arguments(tool, tool_call)
                 if inspect.iscoroutinefunction(tool.implementation):
-                    coro = tool.implementation(**implementation_arguments)
+                    coro = tool.implementation(*args, **kwargs)
                     try:
                         asyncio.get_running_loop()
                     except RuntimeError:
@@ -2039,7 +2047,7 @@ class Response(_BaseResponse):
                             coro,
                         ).result()
                 else:
-                    result = tool.implementation(**implementation_arguments)
+                    result = tool.implementation(*args, **kwargs)
 
                 if isinstance(result, ToolOutput):
                     attachments = result.attachments
@@ -2431,9 +2439,8 @@ class AsyncResponse(_BaseResponse):
                     attachments = []
 
                     try:
-                        result = await tool.implementation(
-                            **_implementation_arguments(tool, tc)
-                        )
+                        args, kwargs = _implementation_arguments(tool, tc)
+                        result = await tool.implementation(*args, **kwargs)
                         if isinstance(result, ToolOutput):
                             attachments.extend(result.attachments)
                             result = result.output
@@ -2499,7 +2506,8 @@ class AsyncResponse(_BaseResponse):
                 attachments = []
 
                 try:
-                    res = tool.implementation(**_implementation_arguments(tool, tc))
+                    args, kwargs = _implementation_arguments(tool, tc)
+                    res = tool.implementation(*args, **kwargs)
                     if inspect.isawaitable(res):
                         res = await res
                     if isinstance(res, ToolOutput):
