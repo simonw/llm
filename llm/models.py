@@ -1879,6 +1879,8 @@ class Response(_BaseResponse):
             chain.append(Message(role="user", parts=[TextPart(text=prompt)]))
         if messages:
             chain.extend(messages)
+        if "key" not in kwargs and self._key is not None:
+            kwargs["key"] = self._key
         follow_up = self.model.prompt(messages=chain, options=options, **kwargs)
         # Keep the originating response's tool lifecycle hooks available
         # if this follow-up also requests local tool calls.
@@ -2269,6 +2271,8 @@ class AsyncResponse(_BaseResponse):
             chain.append(Message(role="user", parts=[TextPart(text=prompt)]))
         if messages:
             chain.extend(messages)
+        if "key" not in kwargs and self._key is not None:
+            kwargs["key"] = self._key
         follow_up = self.model.prompt(messages=chain, options=options, **kwargs)
         # Keep the originating response's tool lifecycle hooks available
         # if this follow-up also requests local tool calls.
