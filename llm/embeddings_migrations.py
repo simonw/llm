@@ -103,3 +103,16 @@ def m006_add_content_type(db):
             "content_type",
         )
     )
+
+
+@embeddings_migrations()
+def m007_add_input_kind(db):
+    db["embeddings"].add_column("input_kind", str)
+    db.execute("""
+        update embeddings set input_kind = case
+            when content_type is not null then 'attachment'
+            when content is not null then 'text'
+            when content_blob is not null then 'binary'
+        end
+        where content_type is not null or content is not null or content_blob is not null
+    """)

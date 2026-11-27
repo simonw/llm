@@ -141,6 +141,12 @@ class Collection:
             _id=value._id,
         )
 
+    @staticmethod
+    def _input_kind(value: str | bytes | Attachment) -> str:
+        if isinstance(value, Attachment):
+            return "attachment"
+        return "text" if isinstance(value, str) else "binary"
+
     def embed(
         self,
         id: str,
@@ -164,9 +170,10 @@ class Collection:
 
         value = self._materialize(value)
         content_hash = self.content_hash(value)
+        input_kind = self._input_kind(value)
         if self.db["embeddings"].count_where(
-            "content_hash = ? and collection_id = ? and id = ?",
-            [content_hash, self.id, id],
+            "content_hash = ? and collection_id = ? and id = ? and input_kind = ?",
+            [content_hash, self.id, id, input_kind],
         ):
             return
         embedding = self.model().embed(value, key=key)
@@ -185,6 +192,7 @@ class Collection:
                     value.resolve_type() if isinstance(value, Attachment) else None
                 ),
                 "content_hash": content_hash,
+                "input_kind": input_kind,
                 "metadata": json.dumps(metadata) if metadata else None,
                 "updated": int(time.time()),
             },
@@ -248,10 +256,10 @@ class Collection:
             items_and_hashes = [(item, self.content_hash(item[1])) for item in batch]
             # Skip only IDs whose own content is unchanged.
             existing_items = {
-                (row["id"], row["content_hash"])
+                (row["id"], row["content_hash"], row["input_kind"])
                 for row in self.db.query(
                     """
-                    select id, content_hash from embeddings
+                    select id, content_hash, input_kind from embeddings
                     where collection_id = ? and content_hash in ({})
                     """.format(",".join("?" for _ in items_and_hashes)),
                     [collection_id]
@@ -261,7 +269,8 @@ class Collection:
             filtered_batch = [
                 item
                 for item, content_hash in items_and_hashes
-                if (item[0], content_hash) not in existing_items
+                if (item[0], content_hash, self._input_kind(item[1]))
+                not in existing_items
             ]
             embeddings = list(
                 self.model().embed_multi((item[1] for item in filtered_batch), key=key)
@@ -296,6 +305,7 @@ class Collection:
                                 else None
                             ),
                             "content_hash": self.content_hash(value),
+                            "input_kind": self._input_kind(value),
                             "metadata": json.dumps(metadata) if metadata else None,
                             "updated": int(time.time()),
                         }
