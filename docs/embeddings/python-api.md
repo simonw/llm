@@ -229,7 +229,7 @@ CREATE TABLE "embeddings" (
    "content_type" TEXT,
    "content_hash" BLOB,
    "metadata" TEXT,
-   "updated" INTEGER,
+   "updated" INTEGER, "input_kind" TEXT,
    PRIMARY KEY ("collection_id", "id")
 )
 ```

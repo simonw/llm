@@ -131,6 +131,79 @@ def test_embed_attachment_rejected_without_attachment_or_binary_support():
         model.embed(llm.Attachment(type="image/png", content=b"png"))
 
 
+@pytest.mark.parametrize("batch", [False, True])
+@pytest.mark.parametrize("store", [False, True])
+def test_same_bytes_in_different_input_types(batch, store):
+    class KindModel(llm.EmbeddingModel):
+        model_id = "input-kind"
+        supports_binary = True
+
+        def embed_batch(self, items):
+            for item in items:
+                seen.append(item)
+                yield [1.0] if isinstance(item, str) else [2.0]
+
+    seen = []
+    collection = llm.Collection("mixed", model=KindModel())
+
+    def embed(value):
+        if batch:
+            collection.embed_multi([("item", value)], store=store)
+        else:
+            collection.embed("item", value, store=store)
+
+    embed("menu")
+    embed(b"menu")
+    embed(b"menu")
+    row = next(collection.db["embeddings"].rows)
+    assert llm.decode(row["embedding"]) == (2.0,)
+    assert seen == ["menu", b"menu"]
+    embed("menu")
+    assert seen == ["menu", b"menu", "menu"]
+
+
+@pytest.mark.parametrize("batch", [False, True])
+def test_legacy_embedding_input_kinds(db_factory, embed_demo, batch):
+    from llm.embeddings_migrations import embeddings_migrations
+
+    db = db_factory(memory=True)
+    embeddings_migrations.apply(db, stop_before="m007_add_input_kind")
+    db["collections"].insert({"id": 1, "model": embed_demo.model_id, "name": "legacy"})
+    for key, content, blob, mime in [
+        ("text", "menu", None, None),
+        ("binary", None, b"menu", None),
+        ("attachment", None, None, "image/png"),
+        ("unknown", None, None, None),
+    ]:
+        value = llm.Attachment(type=mime, content=b"menu") if mime else "menu"
+        db["embeddings"].insert(
+            {
+                "collection_id": 1,
+                "id": key,
+                "embedding": llm.encode([1.0]),
+                "content": content,
+                "content_blob": blob,
+                "content_type": mime,
+                "content_hash": llm.Collection.content_hash(value),
+            }
+        )
+    collection = llm.Collection("legacy", db, model=embed_demo)
+    assert {row["id"]: row["input_kind"] for row in db["embeddings"].rows} == {
+        "text": "text",
+        "binary": "binary",
+        "attachment": "attachment",
+        "unknown": None,
+    }
+    for _ in range(2):
+        entries = [("text", "menu"), ("binary", b"menu"), ("unknown", b"menu")]
+        if batch:
+            collection.embed_multi(entries)
+        else:
+            for key, value in entries:
+                collection.embed(key, value)
+    assert embed_demo.embedded_content == [b"menu"]
+
+
 def test_embed_store(collection):
     collection.embed("3", "hello world again", store=True)
     assert collection.db["embeddings"].count == 3
@@ -225,6 +298,7 @@ def test_collection(collection):
             "content": None,
             "content_blob": None,
             "content_type": None,
+            "input_kind": "text",
             "content_hash": collection.content_hash("hello world"),
             "metadata": None,
             "updated": ANY,
@@ -236,6 +310,7 @@ def test_collection(collection):
             "content": None,
             "content_blob": None,
             "content_type": None,
+            "input_kind": "text",
             "content_hash": collection.content_hash("goodbye world"),
             "metadata": None,
             "updated": ANY,
