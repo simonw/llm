@@ -329,10 +329,14 @@ class Toolbox:
         "prepare",
         "prepare_async",
     )
-    _extra_tools: ClassVar[list[Tool]] = []
+    _extra_tools: list[Tool]
     _config: ClassVar[dict[str, Any]] = {}
     _prepared: bool = False
     _async_prepared: bool = False
+
+    def __init__(self):
+        if not hasattr(self, "_extra_tools"):
+            self._extra_tools = []
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
