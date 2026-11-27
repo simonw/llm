@@ -168,6 +168,19 @@ def test_embed_metadata(collection):
     assert entry.content == "hello yet again"
 
 
+@pytest.mark.parametrize("batch", (False, True))
+def test_empty_metadata_round_trip(collection, batch):
+    if batch:
+        collection.embed_multi_with_metadata([("3", "hello yet again", {})])
+    else:
+        collection.embed("3", "hello yet again", metadata={})
+    results = {
+        entry.id: entry.metadata for entry in collection.similar("hello yet again")
+    }
+    assert results["3"] == {}
+    assert results["1"] is None
+
+
 def test_collection_embed_key(embed_key_demo, request):
     collection = llm.Collection("test", model=embed_key_demo)
     request.addfinalizer(collection.db.close)
