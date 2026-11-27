@@ -2000,7 +2000,7 @@ class Response(_BaseResponse):
                     )
                     continue
 
-            if tool is None or not tool.implementation:
+            if tool is None or tool.implementation is None:
                 # Mirror the async executor: append an error ToolResult so
                 # the provider still receives a result for every tool
                 # call, including a call pending in a rehydrated response
@@ -2369,7 +2369,7 @@ class AsyncResponse(_BaseResponse):
             tool: Tool | None = tools_by_name.get(tc.name)
             exception: Exception | None = None
 
-            if tool is None or not tool.implementation:
+            if tool is None or tool.implementation is None:
                 # Mirror the sync executor: append an error ToolResult so
                 # the provider still receives a result for every tool
                 # call. before_call fires even though the tool is
