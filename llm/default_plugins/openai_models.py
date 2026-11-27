@@ -1407,14 +1407,16 @@ def _attachment(attachment, image_detail=None):
 def _reasoning_content(message: Any) -> str | None:
     """Reasoning text from a Chat Completions message or delta.
 
-    OpenAI-compatible servers that expose reasoning (DeepSeek, vLLM, llama.cpp
-    with --reasoning-format deepseek) send it as an extra `reasoning_content`
-    field, which the openai client keeps on the model object.
+    OpenAI-compatible servers expose this as an extra `reasoning_content` or
+    `reasoning` field, which the openai client keeps on the model object.
     """
     if message is None:
         return None
-    value = getattr(message, "reasoning_content", None)
-    return value if isinstance(value, str) else None
+    for field in ("reasoning_content", "reasoning"):
+        value = getattr(message, field, None)
+        if isinstance(value, str) and value:
+            return value
+    return None
 
 
 class _Shared:
@@ -1743,8 +1745,16 @@ class Chat(_Shared, KeyModel):
                 chunks.append(chunk)
                 if chunk.usage:
                     usage = chunk.usage.model_dump()
-                if chunk.choices and chunk.choices[0].delta:
-                    for tool_call in chunk.choices[0].delta.tool_calls or []:
+                try:
+                    delta = chunk.choices[0].delta
+                except IndexError:
+                    delta = None
+                reasoning = _reasoning_content(delta)
+                if reasoning:
+                    saw_reasoning = True
+                    yield StreamEvent(type="reasoning", chunk=reasoning)
+                if delta:
+                    for tool_call in delta.tool_calls or []:
                         if tool_call.function.arguments is None:
                             tool_call.function.arguments = ""
                         idx = _streamed_tool_call_index(tool_calls, tool_call)
@@ -1765,14 +1775,6 @@ class Chat(_Shared, KeyModel):
                                 chunk=tool_call.function.arguments,
                                 tool_call_id=tool_calls[idx].id,
                             )
-                try:
-                    delta = chunk.choices[0].delta
-                except IndexError:
-                    delta = None
-                reasoning = _reasoning_content(delta)
-                if reasoning:
-                    saw_reasoning = True
-                    yield StreamEvent(type="reasoning", chunk=reasoning)
                 content = delta.content if delta else None
                 if content:
                     # Empty strings are noise (OpenAI's first chunk
@@ -1798,6 +1800,10 @@ class Chat(_Shared, KeyModel):
             if completion.usage:
                 usage = completion.usage.model_dump()
             response.response_json = remove_dict_none_values(completion.model_dump())
+            reasoning = _reasoning_content(completion.choices[0].message)
+            if reasoning:
+                saw_reasoning = True
+                yield StreamEvent(type="reasoning", chunk=reasoning)
             for tool_call in completion.choices[0].message.tool_calls or []:
                 response.add_tool_call(
                     llm.ToolCall(
@@ -1816,10 +1822,6 @@ class Chat(_Shared, KeyModel):
                     chunk=tool_call.function.arguments or "",
                     tool_call_id=tool_call.id,
                 )
-            reasoning = _reasoning_content(completion.choices[0].message)
-            if reasoning:
-                saw_reasoning = True
-                yield StreamEvent(type="reasoning", chunk=reasoning)
             if completion.choices[0].message.content is not None:
                 yield StreamEvent(
                     type="text",
@@ -1874,8 +1876,16 @@ class AsyncChat(_Shared, AsyncKeyModel):
                 if chunk.usage:
                     usage = chunk.usage.model_dump()
                 chunks.append(chunk)
-                if chunk.choices and chunk.choices[0].delta:
-                    for tool_call in chunk.choices[0].delta.tool_calls or []:
+                try:
+                    delta = chunk.choices[0].delta
+                except IndexError:
+                    delta = None
+                reasoning = _reasoning_content(delta)
+                if reasoning:
+                    saw_reasoning = True
+                    yield StreamEvent(type="reasoning", chunk=reasoning)
+                if delta:
+                    for tool_call in delta.tool_calls or []:
                         if tool_call.function.arguments is None:
                             tool_call.function.arguments = ""
                         idx = _streamed_tool_call_index(tool_calls, tool_call)
@@ -1896,14 +1906,6 @@ class AsyncChat(_Shared, AsyncKeyModel):
                                 chunk=tool_call.function.arguments,
                                 tool_call_id=tool_calls[idx].id,
                             )
-                try:
-                    delta = chunk.choices[0].delta
-                except IndexError:
-                    delta = None
-                reasoning = _reasoning_content(delta)
-                if reasoning:
-                    saw_reasoning = True
-                    yield StreamEvent(type="reasoning", chunk=reasoning)
                 content = delta.content if delta else None
                 if content:
                     yield StreamEvent(type="text", chunk=content)
@@ -1927,6 +1929,10 @@ class AsyncChat(_Shared, AsyncKeyModel):
             response.response_json = remove_dict_none_values(completion.model_dump())
             if completion.usage:
                 usage = completion.usage.model_dump()
+            reasoning = _reasoning_content(completion.choices[0].message)
+            if reasoning:
+                saw_reasoning = True
+                yield StreamEvent(type="reasoning", chunk=reasoning)
             for tool_call in completion.choices[0].message.tool_calls or []:
                 response.add_tool_call(
                     llm.ToolCall(
@@ -1945,10 +1951,6 @@ class AsyncChat(_Shared, AsyncKeyModel):
                     chunk=tool_call.function.arguments or "",
                     tool_call_id=tool_call.id,
                 )
-            reasoning = _reasoning_content(completion.choices[0].message)
-            if reasoning:
-                saw_reasoning = True
-                yield StreamEvent(type="reasoning", chunk=reasoning)
             if completion.choices[0].message.content is not None:
                 yield StreamEvent(
                     type="text",
@@ -3357,6 +3359,7 @@ def not_nulls(data) -> dict:
 
 def combine_chunks(chunks: list) -> dict:
     content = ""
+    reasoning_content = ""
     role = None
     finish_reason = None
     # If any of them have log probability, we're going to persist
@@ -3382,6 +3385,9 @@ def combine_chunks(chunks: list) -> dict:
             role = choice.delta.role
             if choice.delta.content is not None:
                 content += choice.delta.content
+            reasoning = _reasoning_content(choice.delta)
+            if reasoning:
+                reasoning_content += reasoning
             if choice.finish_reason is not None:
                 finish_reason = choice.finish_reason
 
@@ -3394,6 +3400,8 @@ def combine_chunks(chunks: list) -> dict:
     }
     if logprobs:
         combined["logprobs"] = logprobs
+    if reasoning_content:
+        combined["reasoning_content"] = reasoning_content
     if chunks:
         for key in ("id", "object", "model", "created", "index"):
             value = getattr(chunks[0], key, None)

@@ -625,6 +625,7 @@ class TestReasoningContent:
         events = list(response.stream_events())
         assert [e.type for e in events] == ["reasoning", "reasoning", "text"]
         assert response.text() == "4"
+        assert response.response_json["reasoning_content"] == "Two plus two is four."
         assert response.messages() == REASONING_CONTENT_MESSAGES
 
     def test_no_redacted_marker_when_reasoning_text_present(self, httpx2_mock):
@@ -641,7 +642,8 @@ class TestReasoningContent:
         response.text()
         assert response.messages() == REASONING_CONTENT_MESSAGES
 
-    def test_non_streamed_reasoning_content(self, httpx2_mock):
+    @pytest.mark.parametrize("reasoning_field", ("reasoning_content", "reasoning"))
+    def test_non_streamed_reasoning_content(self, httpx2_mock, reasoning_field):
         httpx2_mock.add_response(
             method="POST",
             url="https://api.openai.com/v1/chat/completions",
@@ -657,7 +659,7 @@ class TestReasoningContent:
                         "message": {
                             "role": "assistant",
                             "content": "4",
-                            "reasoning_content": "Two plus two is four.",
+                            reasoning_field: "Two plus two is four.",
                         },
                         "finish_reason": "stop",
                     }
@@ -668,6 +670,72 @@ class TestReasoningContent:
         response = model.prompt("hi", key=API_KEY, stream=False)
         assert response.text() == "4"
         assert response.messages() == REASONING_CONTENT_MESSAGES
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("async_", (False, True))
+    @pytest.mark.parametrize("stream", (False, True))
+    async def test_reasoning_precedes_tool_calls(self, httpx2_mock, async_, stream):
+        tool_call = {
+            "id": "call_1",
+            "type": "function",
+            "function": {"name": "calculate", "arguments": "{}"},
+        }
+        if stream:
+            httpx2_mock.add_response(
+                method="POST",
+                url="https://api.openai.com/v1/chat/completions",
+                stream=IteratorStream(
+                    [
+                        _sse(
+                            {
+                                "role": "assistant",
+                                "content": None,
+                                "reasoning_content": "I should calculate.",
+                            },
+                            tool_calls=[{"index": 0, **tool_call}],
+                        ),
+                        _sse({}, finish_reason="tool_calls"),
+                        b"data: [DONE]\n\n",
+                    ]
+                ),
+                headers={"Content-Type": "text/event-stream"},
+            )
+        else:
+            httpx2_mock.add_response(
+                method="POST",
+                url="https://api.openai.com/v1/chat/completions",
+                json={
+                    "model": "gpt-4o-mini",
+                    "choices": [
+                        {
+                            "message": {
+                                "role": "assistant",
+                                "content": None,
+                                "reasoning_content": "I should calculate.",
+                                "tool_calls": [tool_call],
+                            },
+                            "finish_reason": "tool_calls",
+                        }
+                    ],
+                },
+            )
+
+        if async_:
+            response = llm.get_async_model("gpt-4o-mini").prompt(
+                "calculate", key=API_KEY, stream=stream
+            )
+            events = [event async for event in response.astream_events()]
+        else:
+            response = llm.get_model("gpt-4o-mini").prompt(
+                "calculate", key=API_KEY, stream=stream
+            )
+            events = list(response.stream_events())
+
+        assert [event.type for event in events] == [
+            "reasoning",
+            "tool_call_name",
+            "tool_call_args",
+        ]
 
     @pytest.mark.asyncio
     async def test_async_streamed_reasoning_content(self, httpx2_mock):
