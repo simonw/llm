@@ -632,6 +632,83 @@ def test_toolbox_add_tool():
     assert tools.prepared
 
 
+@pytest.mark.parametrize("async_", [False, True])
+@pytest.mark.parametrize("as_tool", [False, True])
+@pytest.mark.parametrize("subclass", [False, True])
+@pytest.mark.asyncio
+async def test_toolbox_dynamic_tools_are_instance_local(async_, as_tool, subclass):
+    class Tools(llm.Toolbox):
+        pass
+
+    toolbox_class = Tools if subclass else llm.Toolbox
+    first = toolbox_class()
+    second = toolbox_class()
+    calls = []
+
+    def first_tool():
+        calls.append("first")
+        return "first"
+
+    def second_tool():
+        calls.append("second")
+        return "second"
+
+    first.add_tool(llm.Tool.function(first_tool) if as_tool else first_tool)
+    assert [tool.name for tool in first.tools()] == ["first_tool"]
+    assert list(second.tools()) == []
+    second.add_tool(llm.Tool.function(second_tool) if as_tool else second_tool)
+    assert [tool.name for tool in first.tools()] == ["first_tool"]
+    assert [tool.name for tool in second.tools()] == ["second_tool"]
+    assert list(toolbox_class().tools()) == []
+
+    model = llm.get_async_model("echo") if async_ else llm.get_model("echo")
+    for toolbox, own_name, other_name, expected in (
+        (first, "first_tool", "second_tool", "first"),
+        (second, "second_tool", "first_tool", "second"),
+    ):
+        response = model.prompt("", tools=[toolbox])
+        assert [tool.name for tool in response.prompt.tools] == [own_name]
+        result = response.execute_tool_call(llm.ToolCall(name=own_name, arguments={}))
+        if async_:
+            result = await result
+        assert result.output == expected
+        assert result.exception is None
+        denied = response.execute_tool_call(llm.ToolCall(name=other_name, arguments={}))
+        if async_:
+            denied = await denied
+        assert denied.output == f'Error: tool "{other_name}" does not exist'
+        assert isinstance(denied.exception, KeyError)
+    assert calls == ["first", "second"]
+
+
+@pytest.mark.parametrize("super_order", ["before", "after", "omitted"])
+@pytest.mark.parametrize("inherited", [False, True])
+def test_toolbox_constructor_preserves_dynamic_tools(super_order, inherited):
+    def lookup(self):
+        return self.label
+
+    class Tools(llm.Toolbox):
+        def __init__(self, label):
+            self.label = label
+            if super_order == "before":
+                super().__init__()
+            self.add_tool(lookup, pass_self=True)
+            if super_order == "after":
+                super().__init__()
+
+    class InheritedTools(Tools):
+        pass
+
+    toolbox_class = InheritedTools if inherited else Tools
+    for label in ("first", "second"):
+        toolbox = toolbox_class(label)
+        assert [tool.name for tool in toolbox.tools()] == ["lookup"]
+        response = llm.get_model("echo").prompt("", tools=[toolbox])
+        result = response.execute_tool_call(llm.ToolCall(name="lookup", arguments={}))
+        assert result.output == label
+        assert result.exception is None
+
+
 def test_toolbox_add_tool_with_pass_self():
     model = llm.get_model("echo")
 
