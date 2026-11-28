@@ -108,7 +108,8 @@ def test_register_fragment_loaders(logs_db, httpx2_mock):
         is_reusable=True,
     )
 
-    assert get_fragment_loaders() == {}
+    default_loaders = get_fragment_loaders()
+    assert list(default_loaders) == ["similar"]
 
     def single_fragment(argument):
         "This is the fragment documentation"
@@ -143,6 +144,7 @@ def test_register_fragment_loaders(logs_db, httpx2_mock):
             "single": single_fragment,
             "three": three_fragments,
             "mixed": fragment_and_attachment,
+            **default_loaders,
         }
 
         # Test the CLI command
@@ -170,8 +172,10 @@ def test_register_fragment_loaders(logs_db, httpx2_mock):
             "\n"
             "mixed:\n"
             "  Undocumented\n"
+            "\n"
+            "similar:\n"
         )
-        assert result2.output == expected2
+        assert result2.output.startswith(expected2)
 
         # Test the one that includes an attachment
         result3 = runner.invoke(
@@ -195,7 +199,7 @@ def test_register_fragment_loaders(logs_db, httpx2_mock):
 
     finally:
         plugins.pm.unregister(name="FragmentLoadersPlugin")
-        assert get_fragment_loaders() == {}
+        assert get_fragment_loaders() == default_loaders
 
     # Let's check the database
     assert list(logs_db.query("select content, source from fragments")) == [

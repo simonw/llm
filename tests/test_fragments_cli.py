@@ -8,6 +8,7 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
+import llm
 from llm.cli import cli
 from llm.migrations import migrate
 
@@ -209,6 +210,81 @@ def test_fragment_absolute_path(user_path, tmp_path):
         "stream": True,
         "previous": [],
     }
+
+
+@pytest.mark.parametrize(
+    "argument,expected_prompt,expected_sources",
+    (
+        ("demo:hello world", "hello world\ngoodbye world", ["demo:1", "demo:2"]),
+        ("demo:hello world:1", "hello world", ["demo:1"]),
+        ("demo:goodbye world:1", "goodbye world", ["demo:2"]),
+    ),
+)
+def test_similar_fragment_loader(
+    user_path_with_embeddings, logs_db, argument, expected_prompt, expected_sources
+):
+    result = CliRunner().invoke(
+        cli,
+        ["prompt", "-m", "echo", "-f", f"similar:{argument}"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert json.loads(result.output)["prompt"] == expected_prompt
+    # Each result is logged as a separate fragment
+    sources = [row["source"] for row in logs_db.query("select source from fragments")]
+    assert sorted(sources) == expected_sources
+
+
+def test_similar_fragment_loader_embeddings_db_env(
+    user_path, tmp_path, db_factory, monkeypatch
+):
+    path = tmp_path / "other.db"
+    collection = llm.Collection("other", db_factory(str(path)), model_id="embed-demo")
+    collection.embed("1", "hello world", store=True)
+    monkeypatch.setenv("LLM_EMBEDDINGS_DB", str(path))
+    result = CliRunner().invoke(
+        cli,
+        ["prompt", "-m", "echo", "-f", "similar:other:hello"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert json.loads(result.output)["prompt"] == "hello world"
+
+
+@pytest.mark.parametrize(
+    "argument,expected_error",
+    (
+        ("demo", "Argument must be in the form collection:search term"),
+        ("demo:", "Argument must be in the form collection:search term"),
+        (":hello", "Argument must be in the form collection:search term"),
+        ("demo:hello:0", "Number of results must be at least 1"),
+        ("missing:hello", "Collection 'missing' does not exist"),
+        ("unstored:hello", "No stored content found for 'hello'"),
+    ),
+)
+def test_similar_fragment_loader_errors(
+    user_path_with_embeddings, user_path, db_factory, argument, expected_error
+):
+    db = db_factory(str(user_path / "embeddings.db"))
+    llm.Collection("unstored", db, model_id="embed-demo").embed("1", "hello world")
+    result = CliRunner().invoke(
+        cli, ["prompt", "-m", "echo", "-f", f"similar:{argument}"]
+    )
+    assert result.exit_code == 1
+    assert f"Could not load fragment similar:{argument}: {expected_error}" in (
+        result.output
+    )
+
+
+def test_similar_fragment_loader_no_embeddings_db(user_path):
+    result = CliRunner().invoke(
+        cli, ["prompt", "-m", "echo", "-f", "similar:demo:hello"]
+    )
+    assert result.exit_code == 1
+    assert "Embeddings database" in result.output
+    assert "does not exist" in result.output
+    # The loader should not create an empty database
+    assert not (user_path / "embeddings.db").exists()
 
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})
