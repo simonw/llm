@@ -2946,18 +2946,24 @@ class Responses(_SharedResponses, KeyModel):
                         if item_id and server_events:
                             server_tool_done_events[item_id] = server_events
                         yield from server_events
-                elif etype == "response.completed":
+                elif etype == "response.failed":
+                    error = event.response.error
+                    raise ValueError(
+                        error.message if error else "Responses stream failed"
+                    )
+                elif etype in ("response.completed", "response.incomplete"):
                     self._refresh_server_tool_events(
                         event.response.output, server_tool_done_events
                     )
                     final_response_dict = event.response.model_dump(warnings=False)
                     if final_response_dict.get("usage"):
                         usage = final_response_dict["usage"]
-            if final_response_dict is not None:
-                response.response_json = remove_dict_none_values(final_response_dict)
-                yield from self._reasoning_refresh_events(
-                    response.response_json, reasoning_done_events
-                )
+            if final_response_dict is None:
+                raise ValueError("Responses stream ended before a terminal event")
+            response.response_json = remove_dict_none_values(final_response_dict)
+            yield from self._reasoning_refresh_events(
+                response.response_json, reasoning_done_events
+            )
         else:
             completion = client.responses.create(
                 model=self.model_name or self.model_id,
@@ -3198,19 +3204,25 @@ class AsyncResponses(_SharedResponses, AsyncKeyModel):
                             server_tool_done_events[item_id] = server_events
                         for server_event in server_events:
                             yield server_event
-                elif etype == "response.completed":
+                elif etype == "response.failed":
+                    error = event.response.error
+                    raise ValueError(
+                        error.message if error else "Responses stream failed"
+                    )
+                elif etype in ("response.completed", "response.incomplete"):
                     self._refresh_server_tool_events(
                         event.response.output, server_tool_done_events
                     )
                     final_response_dict = event.response.model_dump(warnings=False)
                     if final_response_dict.get("usage"):
                         usage = final_response_dict["usage"]
-            if final_response_dict is not None:
-                response.response_json = remove_dict_none_values(final_response_dict)
-                for refresh in self._reasoning_refresh_events(
-                    response.response_json, reasoning_done_events
-                ):
-                    yield refresh
+            if final_response_dict is None:
+                raise ValueError("Responses stream ended before a terminal event")
+            response.response_json = remove_dict_none_values(final_response_dict)
+            for refresh in self._reasoning_refresh_events(
+                response.response_json, reasoning_done_events
+            ):
+                yield refresh
         else:
             completion = await client.responses.create(
                 model=self.model_name or self.model_id,

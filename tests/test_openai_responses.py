@@ -472,6 +472,9 @@ def _code_interpreter_stream():
             "delta": "42",
         },
     )
+    yield _responses_sse(
+        "response.completed", {"response": _text_response_json(text="42")}
+    )
 
 
 def _web_search_refresh_stream():
@@ -1118,11 +1121,73 @@ def test_service_tier_sent_to_chat_completions_fallback(httpx2_mock):
     assert request_body["service_tier"] == "fast"
 
 
-def test_responses_streams_reasoning_summary_text(httpx2_mock):
+def test_responses_rejects_stream_without_terminal_event(httpx2_mock):
     httpx2_mock.add_response(
         method="POST",
         url="https://api.openai.com/v1/responses",
         stream=IteratorStream(_responses_reasoning_summary_stream()),
+        headers={"Content-Type": "text/event-stream"},
+    )
+
+    response = llm.get_model("gpt-5.5").prompt("hello", key="test")
+    with pytest.raises(ValueError, match="ended before a terminal event"):
+        response.text()
+
+
+@pytest.mark.asyncio
+async def test_async_responses_rejects_stream_without_terminal_event(httpx2_mock):
+    httpx2_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/responses",
+        stream=IteratorStream(_responses_reasoning_summary_stream()),
+        headers={"Content-Type": "text/event-stream"},
+    )
+
+    response = llm.get_async_model("gpt-5.5").prompt("hello", key="test")
+    with pytest.raises(ValueError, match="ended before a terminal event"):
+        await response.text()
+
+
+@pytest.mark.parametrize("status", ["incomplete", "failed"])
+def test_responses_handles_unsuccessful_terminal_events(httpx2_mock, status):
+    final_response = _text_response_json(model="gpt-5.5", text="done")
+    final_response["status"] = status
+    if status == "failed":
+        final_response["error"] = {"code": "server_error", "message": "fixture failed"}
+    httpx2_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/responses",
+        stream=IteratorStream(
+            [
+                *_responses_reasoning_summary_stream(),
+                _responses_sse(f"response.{status}", {"response": final_response}),
+            ]
+        ),
+        headers={"Content-Type": "text/event-stream"},
+    )
+
+    response = llm.get_model("gpt-5.5").prompt("hello", key="test")
+    if status == "failed":
+        with pytest.raises(ValueError, match="fixture failed"):
+            response.text()
+    else:
+        assert response.text() == "done"
+        assert response.response_json["status"] == "incomplete"
+
+
+def test_responses_streams_reasoning_summary_text(httpx2_mock):
+    httpx2_mock.add_response(
+        method="POST",
+        url="https://api.openai.com/v1/responses",
+        stream=IteratorStream(
+            [
+                *_responses_reasoning_summary_stream(),
+                _responses_sse(
+                    "response.completed",
+                    {"response": _text_response_json(text="done")},
+                ),
+            ]
+        ),
         headers={"Content-Type": "text/event-stream"},
     )
 
