@@ -175,7 +175,7 @@ llm logs -c --json --expand
 
 The `similar:` fragment prefix runs a similarity search against one of your {ref}`embedding collections <embeddings-collections>` and adds the content of the closest matches to the prompt, one fragment per result.
 
-This works with collections where content was stored using the `--store` option to {ref}`llm embed <embeddings-cli-embed>` or {ref}`llm embed-multi <embeddings-cli-embed-multi>`.
+This works with collections where text content was stored using the `--store` option to {ref}`llm embed <embeddings-cli-embed>` or {ref}`llm embed-multi <embeddings-cli-embed-multi>`. Binary content stored using `--binary` or `--attachment` is not included.
 
 The argument is the name of the collection followed by the text to search for:
 

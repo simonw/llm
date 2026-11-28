@@ -259,7 +259,8 @@ def test_similar_fragment_loader_embeddings_db_env(
         (":hello", "Argument must be in the form collection:search term"),
         ("demo:hello:0", "Number of results must be at least 1"),
         ("missing:hello", "Collection 'missing' does not exist"),
-        ("unstored:hello", "No stored content found for 'hello'"),
+        ("unstored:hello", "No stored text content found for 'hello'"),
+        ("binary:hello", "No stored text content found for 'hello'"),
     ),
 )
 def test_similar_fragment_loader_errors(
@@ -267,6 +268,10 @@ def test_similar_fragment_loader_errors(
 ):
     db = db_factory(str(user_path / "embeddings.db"))
     llm.Collection("unstored", db, model_id="embed-demo").embed("1", "hello world")
+    # Binary content is stored in content_blob, which is not returned
+    llm.Collection("binary", db, model_id="embed-demo").embed(
+        "1", b"hello world", store=True
+    )
     result = CliRunner().invoke(
         cli, ["prompt", "-m", "echo", "-f", f"similar:{argument}"]
     )
@@ -285,6 +290,22 @@ def test_similar_fragment_loader_no_embeddings_db(user_path):
     assert "does not exist" in result.output
     # The loader should not create an empty database
     assert not (user_path / "embeddings.db").exists()
+
+
+def test_similar_fragment_loader_unrelated_db(
+    user_path, tmp_path, db_factory, monkeypatch
+):
+    path = tmp_path / "other.db"
+    db = db_factory(str(path))
+    db["dogs"].insert({"name": "Cleo"})
+    monkeypatch.setenv("LLM_EMBEDDINGS_DB", str(path))
+    result = CliRunner().invoke(
+        cli, ["prompt", "-m", "echo", "-f", "similar:demo:hello"]
+    )
+    assert result.exit_code == 1
+    assert f"No embeddings table found in {path}" in result.output
+    # The loader should not add the embeddings tables to other databases
+    assert db.table_names() == ["dogs"]
 
 
 @mock.patch.dict(os.environ, {"OPENAI_API_KEY": "X"})

@@ -20,7 +20,7 @@ def similar_loader(argument: str) -> list[llm.Fragment]:
     Argument is collection:search term, optionally followed by
     :N for the number of results to return (default 5)
 
-    Only entries that were embedded with stored content are returned
+    Only entries that were embedded with stored text content are returned
     """
     collection_name, _, search_term = argument.partition(":")
     number = DEFAULT_SIMILAR_NUMBER
@@ -42,6 +42,10 @@ def similar_loader(argument: str) -> list[llm.Fragment]:
         raise ValueError(f"Embeddings database {db_path} does not exist")
     db = sqlite_utils.Database(db_path)
     try:
+        # Collection() runs the embeddings migrations, so check this is an
+        # embeddings database first rather than adding tables to another one
+        if not db["embeddings"].exists():
+            raise ValueError(f"No embeddings table found in {db_path}")
         try:
             collection = llm.Collection(collection_name, db, create=False)
         except llm.Collection.DoesNotExist:
@@ -57,7 +61,7 @@ def similar_loader(argument: str) -> list[llm.Fragment]:
     ]
     if not fragments:
         raise ValueError(
-            f"No stored content found for '{search_term}' in collection "
+            f"No stored text content found for '{search_term}' in collection "
             f"'{collection_name}' - use --store when embedding to store content"
         )
     return fragments
