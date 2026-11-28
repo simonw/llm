@@ -170,6 +170,26 @@ Fragments are returned by `llm logs --json` as well. By default these are trunca
 llm logs -c --json --expand
 ```
 
+(fragments-similar)=
+## Fragments from embedding collections
+
+The `similar:` fragment prefix runs a similarity search against one of your {ref}`embedding collections <embeddings-collections>` and adds the content of the closest matches to the prompt, one fragment per result.
+
+This works with collections where text content was stored using the `--store` option to {ref}`llm embed <embeddings-cli-embed>` or {ref}`llm embed-multi <embeddings-cli-embed-multi>`. Binary content stored using `--binary` or `--attachment` is not included.
+
+The argument is the name of the collection followed by the text to search for:
+
+```bash
+llm -f 'similar:blog-paragraphs:datasette features' \
+  'tell me about datasette features' -s 'use only text provided'
+```
+This returns the 5 most similar items by default. Add `:N` to the end to change that number:
+```bash
+llm -f 'similar:blog-paragraphs:datasette features:10' \
+  'tell me about datasette features'
+```
+Collections are read from the default `embeddings.db` database, or from the database specified by the `LLM_EMBEDDINGS_DB` environment variable.
+
 (fragments-plugins)=
 ## Using fragments from plugins
 

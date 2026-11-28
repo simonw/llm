@@ -415,6 +415,8 @@ You can filter results to only show IDs that begin with a specific prefix using 
 llm similar quotations --prefix 'movies/' -c 'star wars'
 ```
 
+To include the content of the most similar items in a prompt, use the `similar:` {ref}`fragment loader <fragments-similar>`.
+
 (embeddings-cli-embed-models)=
 ## llm embed-models
 

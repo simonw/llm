@@ -10,6 +10,7 @@ from . import hookspecs
 DEFAULT_PLUGINS = (
     "llm.default_plugins.openai_models",
     "llm.default_plugins.default_tools",
+    "llm.default_plugins.default_fragment_loaders",
 )
 
 pm = pluggy.PluginManager("llm")
