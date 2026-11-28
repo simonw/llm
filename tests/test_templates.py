@@ -299,6 +299,17 @@ def test_templates_error_on_missing_schema(templates_path):
             marks=pytest.mark.httpx2_mock(assert_all_responses_were_requested=False),
             id="missing-braced-parameter",
         ),
+        pytest.param(
+            "system: 'Greet ${name} and $name'",
+            "Input text",
+            [],
+            None,
+            None,
+            "Error: Missing variables: name",
+            None,
+            marks=pytest.mark.httpx2_mock(assert_all_responses_were_requested=False),
+            id="repeated-missing-parameter",
+        ),
         # Template generated prompt should combine with CLI prompt
         (
             "prompt: 'Say $hello'",
